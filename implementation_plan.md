@@ -1,6 +1,6 @@
 # Implementation Plan - SIRA
 
-Status: rencana disepakati berdasarkan diskusi, implementasi aplikasi belum dimulai.
+Status: implementasi prototype berjalan setelah persetujuan pengguna. Fondasi, UI, ingestion, retrieval, relay, dan tes lokal tersedia; evaluasi OpenAI nyata serta akurasi bahan resmi masih berlangsung. Lihat `task.md` dan `docs/testing.md` untuk bukti progres.
 
 Tanggal penyusunan: 8 Oktober 2026.
 

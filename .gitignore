@@ -64,6 +64,7 @@ playwright-report/
 /logs/
 /output/
 /artifacts/
+/tools/
 
 # Editor and operating-system files.
 .idea/

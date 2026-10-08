@@ -1,0 +1,2 @@
+OPENAI_API_KEY=replace-via-wrangler-secret-put
+RELAY_TOKEN_HASH=replace-with-sha256-of-testing-token

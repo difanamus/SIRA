@@ -1,0 +1,22 @@
+name = "sira-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Enable only after configuring Secrets, expiry, and an agreed testing budget.
+RELAY_ENABLED = "false"
+RELAY_EXPIRES_AT = "2026-10-16T03:42:55Z"
+MAX_REQUESTS = "1000"
+MAX_TOKEN_UNITS = "2000000"
+REQUESTS_PER_MINUTE = "30"
+
+[[durable_objects.bindings]]
+name = "QUOTA"
+class_name = "Quota"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Quota"]
+
+[observability]
+enabled = false
