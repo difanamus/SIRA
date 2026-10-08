@@ -14,7 +14,7 @@ from backend.app.config import Settings
 from backend.app.db import Database
 from backend.app.ingestion import Ingestion, chunk_page, image_payload, render_page
 from backend.app.ocr_layout import detect_tables, table_records, validate_table
-from backend.app.ocr_pipeline import DocumentOCR, image_zones
+from backend.app.ocr_pipeline import DocumentOCR, critical_problem, image_zones, issue, source_bounds
 
 TEXT = "Ketentuan administrasi pendidikan personel mengikuti dokumen resmi yang telah ditetapkan."
 
@@ -147,6 +147,48 @@ def test_source_zones_preserve_notes_beside_table():
     assert len(zones) == 2  # Table plus side note; whitespace does not call AI.
     assert sum(zone["grid"] is not None for zone in zones) == 1
     assert any(zone["bbox"][0] < 0.8 < zone["bbox"][2] and zone["bbox"][1] < 0.4 < zone["bbox"][3] for zone in zones)
+
+
+def evidence(text, top, confidence=99):
+    return [
+        {"text": token, "confidence": confidence, "bbox": [0.1 + i * 0.04, top, 0.13 + i * 0.04, top + 0.02]}
+        for i, token in enumerate(text.split())
+    ]
+
+
+def test_repeated_words_do_not_expand_heading_or_mix_dates_between_blocks():
+    heading = "Ketentuan pendidikan personel Polri tahun 2027"
+    body = "Pelaksanaan pendidikan personel Polri ditetapkan tanggal 29 Oktober 2026"
+    words = evidence(heading, 0.1) + evidence(body, 0.6)
+    zone = {"bbox": [0, 0, 1, 1], "grid": None}
+    bounds = source_bounds(text_block(heading), zone, words)
+    assert bounds[3] < 0.2
+    assert critical_problem([text_block(heading), text_block(body)], zone, words, 1) == ""
+    changed = [text_block(heading.replace("2027", "2028")), text_block(body)]
+    assert critical_problem(changed, zone, words, 1)
+
+
+def test_weak_local_digit_guess_does_not_veto_clear_vision_but_negation_still_matters():
+    zone = {"bbox": [0, 0, 1, 1], "grid": None}
+    words = evidence("Nomor Kep X11 Tahun 2026 tidak berubah", 0.3)
+    next(word for word in words if word["text"] == "X11")["confidence"] = 80
+    blocks = [text_block("Nomor Kep XII Tahun 2026 tidak berubah")]
+    assert critical_problem(blocks, zone, words, 1) == ""
+    assert critical_problem([text_block("Nomor Kep XII Tahun 2026 berubah")], zone, words, 1)
+    blocks[0]["rows"] = 8  # Cosmetic line count on a text block, without cells.
+    assert issue(blocks[0], {"tables": [], "words": words}) == ""
+    blocks[0]["columns"] = 2
+    assert issue(blocks[0], {"tables": [], "words": words})
+
+
+def test_only_isolated_folio_is_excluded_from_critical_comparison():
+    zone = {"bbox": [0, 0, 1, 1], "grid": None}
+    body = "Kegiatan berlangsung tanggal 10 Oktober 2026"
+    words = evidence("10", 0.04) + evidence(body, 0.4)
+    assert critical_problem([text_block(body)], zone, words, 10) == ""
+    assert critical_problem([text_block(body.replace("tanggal 10", "tanggal 11"))], zone, words, 10)
+    words = evidence("tanggal 10 Oktober 2026", 0.04)
+    assert critical_problem([text_block("tanggal 11 Oktober 2026")], zone, words, 10)
 
 
 def test_local_finishes_while_three_image_readers_are_blocked(tmp_path, monkeypatch):
@@ -310,3 +352,27 @@ def test_structured_relay_transmits_only_images_and_fixed_flag(tmp_path, monkeyp
         ("vision", {"image": "data:image/jpeg;base64,YWJj", "layout": True}),
         ("vision-fragment", {"image": "data:image/jpeg;base64,YWJj", "layout": True}),
     ]
+
+
+def test_revalidation_reuses_paid_results_and_preserves_uncertain_sol(tmp_path, monkeypatch):
+    calls = []
+
+    class AI:
+        def vision(self, image, **kwargs):
+            calls.append(kwargs)
+            return {"blocks": [text_block(uncertain=True)]}
+
+    instance, version = owner(tmp_path, monkeypatch, AI())
+    assert DocumentOCR(instance, version).extract()
+    saved = instance.db.one("SELECT state FROM ocr_regions")
+    state = json.loads(saved["state"])
+    state["validator"] = "previous-validator"
+    state["mini"]["blocks"][0]["uncertain"] = False
+    instance.db.execute("UPDATE ocr_regions SET state=?", (json.dumps(state),))
+    # A new validator cannot discard a saved doubtful Sol response to make the
+    # page appear clean. Neither paid request is repeated.
+    assert DocumentOCR(instance, version).extract()
+    instance.prepare_review("v")
+    assert len(calls) == 2
+    assert instance.db.one("SELECT required FROM review_pages")["required"] == 1
+    assert instance.db.one("SELECT text FROM review_pages")["text"].count(TEXT) == 1

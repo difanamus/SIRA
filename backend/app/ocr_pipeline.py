@@ -8,6 +8,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from difflib import SequenceMatcher
 
 import numpy as np
 import pdfplumber
@@ -19,6 +20,7 @@ from .ocr_layout import bbox, block_text, detect_tables, overlap, validate_table
 
 log = logging.getLogger("sira.ocr")
 PIPELINE = "layout-v3"
+VALIDATOR = "zone-evidence-v3"
 
 
 def words_in(words, bounds):
@@ -76,13 +78,28 @@ def image_zones(image, tables, words, force):
 def source_bounds(block, zone, words):
     if block["kind"] == "table" and zone["grid"]:
         return zone["grid"]["bbox"]
-    tokens = set(re.findall(r"\w{3,}", block["text"].casefold()))
-    matches = [
-        word
+    # Match ordered phrases, not every occurrence of common words on the page.
+    # Otherwise a small heading containing "Polri" can span the entire page.
+    source = [
+        (token, word)
         for word in words
-        if words_in([word], zone["bbox"]) and re.sub(r"\W", "", word["text"].casefold()) in tokens
+        if words_in([word], zone["bbox"])
+        for token in re.findall(r"\w+", word["text"].casefold())
     ]
-    if len(matches) >= 3:
+    tokens = re.findall(r"\w+", block["text"].casefold())
+    anchors = SequenceMatcher(None, [token for token, _ in source], tokens, autojunk=False).get_matching_blocks()
+    anchor = max(anchors, key=lambda match: match.size)
+    if anchor.size >= min(3, max(1, len(tokens))):
+        offset = anchor.a - anchor.b
+        aligned = [
+            match
+            for match in anchors
+            if match.size >= 2 and abs(match.a - match.b - offset) <= max(4, len(tokens) * 0.2)
+        ]
+        aligned = aligned or [anchor]
+        first = min(match.a for match in aligned)
+        last = max(match.a + match.size for match in aligned)
+        matches = [word for _, word in source[first:last]]
         x0, y0, x1, y1 = zone["bbox"]
         return [
             max(x0, min(w["bbox"][0] for w in matches) - 0.01),
@@ -91,6 +108,37 @@ def source_bounds(block, zone, words):
             min(y1, max(w["bbox"][3] for w in matches) + 0.01),
         ]
     return zone["bbox"]
+
+
+def critical_problem(blocks, zone, words, page):
+    """Compare one source area once; weak OCR must not veto clear vision.
+
+    This check runs after independent image reading. Strong local numbers are
+    evidence requiring a reread when absent/changed, while uncertain local
+    digit guesses are not ground truth. Negations/semesters remain conservative.
+    """
+    relevant = [word for word in words if words_in([word], zone["bbox"])]
+
+    # An isolated folio is provenance, not a date/condition. Some vision models
+    # omit it; the PDF page number is already stored separately as the source.
+    def folio(word):
+        if word["text"].strip(". ") != str(page) or word["bbox"][1] >= 0.1:
+            return False
+        a, b = word["bbox"][1], word["bbox"][3]
+        return not any(
+            other is not word
+            and min(b, other["bbox"][3]) - max(a, other["bbox"][1]) > (b - a) * 0.5
+            and max(other["bbox"][0] - word["bbox"][2], word["bbox"][0] - other["bbox"][2]) < 0.08
+            for other in relevant
+        )
+
+    relevant = [word for word in relevant if not folio(word)]
+    local = critical_signature(" ".join(word["text"] for word in relevant))
+    strong = critical_signature(" ".join(word["text"] for word in relevant if word["confidence"] >= 95))
+    vision = critical_signature(" ".join(block_text(block) for block in blocks))
+    if strong[0] - vision[0] or (relevant and (local[1] != vision[1] or local[2] != vision[2])):
+        return "Angka yang terbaca kuat, negasi, atau semester berbeda; perlu pembacaan gambar ulang."
+    return ""
 
 
 def valid_blocks(result):
@@ -125,7 +173,7 @@ def table_grid(block, grids):
     return grid if score > 0.35 else None
 
 
-def issue(block, plan, *, crosscheck=True):
+def issue(block, plan):
     if block["kind"] == "table":
         problem = validate_table(block, table_grid(block, plan["tables"]))
         if problem:
@@ -139,17 +187,12 @@ def issue(block, plan, *, crosscheck=True):
             area = max(0, min(x1, c) - max(x0, a)) * max(0, min(y1, d) - max(y0, b))
             if area > 0.65 * (x1 - x0) * (y1 - y0) or area > 0.8 * (c - a) * (d - b):
                 return "Tabel masih disajikan sebagai teks; struktur sel perlu dibaca dari gambar."
-        if block.get("cells") or any(block.get(k, 0) != 0 for k in ("rows", "columns", "header_rows")):
+        if block.get("cells") or block.get("columns", 0) != 0 or block.get("header_rows", 0) != 0:
             return "Teks biasa memiliki struktur tabel yang tidak valid."
         if not text.strip():
             return "Bagian teks kosong."
     if block["uncertain"] or "[TIDAK TERBACA]" in text:
         return "AI belum yakin membaca teks atau hubungan antar sel."
-    local = words_in(plan["words"], block["bbox"])
-    # Comparison happens AFTER independent image reading. Local OCR is never
-    # sent to either model, and differences never overwrite an AI transcription.
-    if crosscheck and local and critical_signature(local) != critical_signature(text):
-        return "Angka atau negasi berbeda dari pembacaan lokal; perlu pembacaan gambar ulang."
     return ""
 
 
@@ -316,6 +359,7 @@ class DocumentOCR:
                 state[key] = {"blocks": [], "format_error": str(exc)}
             state[key + "_input_sha256"] = hashlib.sha256(payload.encode()).hexdigest()
             state[key + "_ms"] = round((time.monotonic() - before) * 1000)
+            state[key + "_bbox"] = bounds
             self.save_region(
                 page, number, bounds, state, "", "ocr-layout-draft-v3", "Pembacaan gambar sedang diverifikasi.", True
             )
@@ -335,13 +379,43 @@ class DocumentOCR:
                 state = json.loads(prior["state"]) if prior else {}
                 if state.get("input_layout") != "source-zones-v1":
                     state = {"pipeline": PIPELINE, "input_layout": "source-zones-v1"}
-                if state.get("done"):
+                if state.get("done") and state.get("validator") == VALIDATOR:
                     texts.append(prior["text"])
                     unresolved |= bool(prior["required"])
                     sol_used |= "sol" in state
                     ai_used |= "mini" in state
                     continue
                 bounds = zone["bbox"]
+                # Preserve the completed Sol composition, including any clear
+                # mini blocks outside its crop. Re-adding mini here duplicates
+                # text and can discard uncertainty from the final paid reading.
+                if state.get("done") and "sol" in state and state.get("resolved_blocks"):
+                    final_blocks = copy.deepcopy(valid_blocks({"blocks": state["resolved_blocks"]}))
+                    problems = []
+                    for block in final_blocks:
+                        block["bbox"] = source_bounds(block, zone, plan["words"])
+                        problems.append(issue(block, plan))
+                        if block["kind"] == "table" and zone["grid"]:
+                            problems.append(validate_table(block, zone["grid"]))
+                    if zone["grid"] and sum(b["kind"] == "table" for b in final_blocks) != 1:
+                        problems.append("Tabel belum dibaca secara utuh.")
+                    problem = "; ".join(dict.fromkeys(p for p in problems if p))
+                    text = "\n\n".join(block_text(block, part) for block in final_blocks)
+                    state.update(validator=VALIDATOR, resolved_blocks=final_blocks)
+                    self.save_region(
+                        number,
+                        part,
+                        bounds,
+                        state,
+                        text,
+                        "ocr+4.1-mini+5.6-sol-layout-v3",
+                        f"Bagian {part}: {problem}" if problem else "",
+                        bool(problem),
+                    )
+                    texts.append(text)
+                    unresolved |= bool(problem)
+                    sol_used = ai_used = True
+                    continue
                 if not zone["ai"]:
                     text, method, problem = zone["text"], "ocr-local-layout-v3", ""
                 elif not self.owner.settings.vision_enabled or not self.owner.settings.ai_ready:
@@ -379,6 +453,9 @@ class DocumentOCR:
                         problems = ["Tabel belum dibaca secara utuh."] * max(1, len(blocks))
                     if not blocks:
                         problems = ["Struktur AI belum lengkap; cocokkan draft dengan gambar sumber."]
+                    critical = critical_problem(blocks, zone, plan["words"], number)
+                    if critical:
+                        problems = [problem or critical for problem in problems]
                     # Detect omitted source text using independent local evidence.
                     # This is only a warning signal; no local text is sent to AI.
                     zone_text = zone["text"]
@@ -389,7 +466,7 @@ class DocumentOCR:
                         problems = ["Ada teks sumber yang belum tercakup dalam pembacaan gambar."] * max(1, len(blocks))
                     text = "\n\n".join(block_text(b, part) for b in blocks) or zone_text or plan["text"]
                     problem = "; ".join(dict.fromkeys(p for p in problems if p))
-                    if problem:
+                    if problem or "sol" in state:
                         # Only disputed blocks are sent to Sol. A whole table is
                         # retained even when one merged cell causes the dispute.
                         disputed = [b for i, b in enumerate(blocks) if i < len(problems) and problems[i]]
@@ -401,7 +478,9 @@ class DocumentOCR:
                                 max(b["bbox"][2] for b in disputed),
                                 max(b["bbox"][3] for b in disputed),
                             ]
-                        if zone["grid"] or sol_bounds[3] - sol_bounds[1] < 0.75:
+                        if "sol" in state:
+                            sol_bounds = state.get("sol_bbox", sol_bounds)
+                        if "sol" in state or zone["grid"] or sol_bounds[3] - sol_bounds[1] < 0.75:
                             sol_crop = image.crop(
                                 (
                                     round(sol_bounds[0] * image.width),
@@ -420,7 +499,7 @@ class DocumentOCR:
                                 sol_zone = {"bbox": sol_bounds, "grid": zone["grid"]}
                                 for replacement in replacements:
                                     replacement["bbox"] = source_bounds(replacement, sol_zone, plan["words"])
-                                    final_problems.append(issue(replacement, plan, crosscheck=False))
+                                    final_problems.append(issue(replacement, plan))
                                     if replacement["kind"] == "table" and zone["grid"]:
                                         final_problems.append(validate_table(replacement, zone["grid"]))
                                 problem = "; ".join(dict.fromkeys(p for p in final_problems if p))
@@ -433,7 +512,7 @@ class DocumentOCR:
                             except OCRFormatError as exc:
                                 problem = str(exc)
                 warning = f"Bagian {part}: {problem}" if problem else ""
-                state.update(done=True, bbox=bounds)
+                state.update(done=True, bbox=bounds, validator=VALIDATOR)
                 self.save_region(number, part, bounds, state, text, method, warning, bool(problem))
                 texts.append(text)
                 unresolved |= bool(problem)
