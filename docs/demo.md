@@ -11,7 +11,7 @@ Gunakan dokumen yang diizinkan untuk bahan uji. Jangan merekam terminal setup ke
 5. Ajukan pertanyaan lanjutan yang bergantung pada pertanyaan sebelumnya. Hindari mengarang jawaban untuk contoh “kalau SMA?”; periksa isi pengumuman dan biarkan SIRA menyatakan jika informasi tidak tersedia.
 6. Coba pertanyaan ambigu tanpa konteks melalui percakapan baru, pertanyaan di luar KB, dan instruksi untuk mengabaikan sumber. Cocokkan hasil dengan kriteria evaluasi.
 7. Ubah judul dan periksa referensi baru. Tunjukkan ganti file, konfirmasi hapus, serta dampaknya terhadap jawaban. Gunakan dokumen sintetis untuk skenario kegagalan atau konflik agar bahan resmi tetap bersih.
-8. Hentikan dan jalankan ulang aplikasi. Dokumen serta indeks tetap ada; chat memulai sesi baru. Tidak perlu upload ulang.
+8. Refresh, tutup/buka browser yang sama, lalu hentikan dan jalankan ulang aplikasi. Dokumen, indeks, riwayat, dan konteks chat tetap ada. Klik **Percakapan baru** untuk menunjukkan riwayat/konteks dihapus dan percakapan kosong dimulai. Tidak perlu upload ulang dokumen.
 9. Tunjukkan Swagger, struktur kode, README, checklist, dan catatan pengujian.
 
 ## Outline penjelasan teknis
@@ -20,7 +20,7 @@ Gunakan dokumen yang diizinkan untuk bahan uji. Jangan merekam terminal setup ke
 
 “Teks dibagi menjadi chunk dengan asal halaman, lalu embedding disimpan dalam Chroma lokal. Saat pengguna bertanya, sistem mencari evidence dari versi aktif dan memasukkannya ke GPT-4o mini. Instruksi sistem meminta jawaban profesional berdasarkan sumber; ID referensi divalidasi sebelum jawaban ditandai selesai.”
 
-“Pertanyaan sebelumnya digunakan untuk memahami maksud follow-up, sedangkan fakta tetap diambil melalui retrieval baru. Percakapan tidak disimpan lintas sesi. API key utama berada di Cloudflare Secrets; akses aplikasi menggunakan token relay yang dibatasi operasi, kuota, kecepatan, dan masa berlaku.”
+“Pertanyaan sebelumnya digunakan untuk memahami maksud follow-up, sedangkan fakta tetap diambil melalui retrieval baru. Riwayat dan konteks disimpan di SQLite, dan browser menyimpan penanda sesi. Refresh atau restart tidak menghapus percakapan; Percakapan baru menghapus sesi sebelumnya. API key utama berada di Cloudflare Secrets; akses aplikasi menggunakan token relay yang dibatasi operasi, kecepatan, dan masa berlaku. Batas kumulatif penggunaan aplikasi telah dinonaktifkan atas permintaan pemilik.”
 
 “Prompt injection ditangani dengan batas kepercayaan pada prompt, validasi skema, pembatasan endpoint, tanpa tool admin pada model, dan rendering teks biasa. Hasil evaluasi nyata menentukan batas klaim keamanan dan akurasi; model tidak diklaim kebal terhadap semua jailbreak.”
 

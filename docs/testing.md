@@ -132,3 +132,20 @@ Sapaan dengan nama seperti “halo sira” sebelumnya tidak cocok dengan pola sa
 Empat tes regresi sapaan/referensi lulus dengan AI palsu, termasuk tidak ada panggilan embedding/jawaban pada sapaan, konteks topik sebelumnya tetap utuh, jawaban faktual tanpa sumber tetap ditolak, dan retry referensi tetap berjalan. Ruff lulus. Run awal di sandbox tidak selesai dan dihentikan; rerun runtime lokal lulus, dengan satu peringatan deprecation TestClient/httpx yang sudah ada.
 
 Backend utama direstart saat dua dokumen berstatus siap. Browser desktop 1440×1000 dan mobile 390×844 menampilkan balasan lokal “Saya SIRA” untuk “halo sira”, tanpa peringatan, referensi palsu, atau error JavaScript. Screenshot lokal di `tmp/greeting-ui/` diabaikan Git. Tidak ada panggilan OpenAI pada verifikasi sapaan ini.
+
+## Riwayat dan konteks persisten — 8 Oktober 2026
+
+Atas keputusan terbaru pengguna, refresh/tutup browser/restart aplikasi tidak lagi menghapus percakapan. SQLite schema 5 menyimpan hash token sesi, pertanyaan terdahulu untuk maksud follow-up, konteks pencarian, pesan, referensi, serta status jawaban. Browser hanya menyimpan token acak di localStorage untuk origin tersebut. Riwayat dipulihkan melalui endpoint POST yang memerlukan token sesi dan memeriksa origin; isi riwayat tidak diterima dari klien sebagai konteks model. Jawaban lama tidak menjadi sumber fakta.
+
+Tombol Percakapan baru membuat sesi baru sekaligus menghapus sesi/pesan lama secara transaksional; token lama tidak bisa membaca riwayat atau mengirim pertanyaan lagi. Tab lain mengikuti reset. Sesi tidak kedaluwarsa karena idle; cache memori dapat dikeluarkan dan dimuat ulang tanpa kehilangan data. Perubahan KB tetap memperbarui konteks sumber agar dokumen yang dihapus tidak digunakan kembali, tanpa menghapus pesan yang tampil.
+
+Respons streaming menyimpan progres secara berkala; selesai/error disimpan sebelum event diteruskan. Pembatalan/koneksi terputus mempertahankan teks parsial sebagai belum selesai. Startup menandai respons pending yang terputus. Restore yang gagal tidak membuat sesi kosong secara diam-diam; UI menyediakan Muat ulang riwayat. Restore pending melakukan polling lokal dan tidak mengulang panggilan model.
+
+Verifikasi:
+
+- Seluruh suite backend: 40 lulus, 1 live opt-in dilewati. Setelah penguncian cache sesi dan tes pembatalan stream ditambahkan, 8 tes regresi terkait diulang dan lulus. Satu peringatan deprecation TestClient/httpx yang sudah ada. Ruff lulus. Tes memakai AI palsu.
+- Tes membuktikan riwayat/referensi dan follow-up bertahan setelah pengeluaran cache serta app baru; konteks tetap hanya pertanyaan terdahulu. Browser lain tidak dapat melihat riwayat tanpa token. Token lama dicabut setelah reset. Gangguan stream dan restart mempertahankan jawaban parsial tanpa menjadikannya konteks fakta. Pemeriksaan sumber dan sapaan tetap lulus.
+- Build TypeScript/Vite lulus; run awal dibatasi realpath Windows pada sandbox, rerun lokal berhasil. Tidak ada perubahan Worker atau deployment Cloudflare untuk fitur ini.
+- Browser nyata pada aplikasi utama: refresh, navigasi admin/kembali, tutup/buka tab, lalu browser/backend restart memulihkan dua pesan sapaan. Gangguan endpoint history simulasi tidak mengganti token/menghapus riwayat; retry memulihkan pesan. Percakapan baru mengosongkan pesan, mencabut token lama (410), memperbarui tab kedua, dan tetap kosong setelah refresh. Konteks browser terpisah tetap kosong. Desktop/mobile tidak mengalami error JavaScript atau overflow horizontal. Semua verifikasi UI memakai sapaan lokal, tanpa panggilan OpenAI.
+
+Bukti lokal di `tmp/persistent-chat-ui/`, diabaikan Git. Pemulihan menggunakan browser/profil dan origin yang sama; penghapusan data situs menghilangkan penanda sesi. Tidak ada daftar percakapan lama atau sinkronisasi antarperangkat dalam prototype ini.

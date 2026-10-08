@@ -32,7 +32,7 @@ Kedua dokumen pedoman tidak otomatis menjadi knowledge base. Instalasi baru dimu
 - Penyimpanan persisten untuk PDF, hasil ekstraksi, metadata, serta embedding/index.
 - Pipeline parsing, OCR bila diperlukan, chunking, embedding, retrieval, dan generasi jawaban.
 - GPT-4o mini sebagai satu-satunya model jawaban. OCR: lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada potongan yang masih meragukan (keputusan pengguna 8 Oktober 2026).
-- Konteks percakapan per sesi untuk pertanyaan lanjutan.
+- Konteks dan riwayat satu percakapan persisten untuk pertanyaan lanjutan; dipulihkan saat refresh/buka ulang dan dihapus hanya melalui Percakapan baru (keputusan pengguna 8 Oktober 2026).
 - Jawaban sopan dan profesional, disertai referensi dokumen berupa teks biasa.
 - Jawaban streaming dan penanganan kesalahan yang dapat dipahami pengguna.
 - Proteksi berlapis terhadap prompt injection, penyalahgunaan API, dan akses admin tanpa izin.
@@ -43,7 +43,7 @@ Kedua dokumen pedoman tidak otomatis menjadi knowledge base. Instalasi baru dimu
 
 - Pemilihan model atau provider AI oleh admin dan pengisian API key melalui UI.
 - Klasifikasi dokumen publik/rahasia dan hak akses dokumen per pengguna.
-- Riwayat chat lintas sesi, akun pengguna umum, dan pengelolaan banyak admin.
+- Daftar beberapa percakapan, sinkronisasi riwayat antarperangkat, akun pengguna umum, dan pengelolaan banyak admin.
 - Dukungan format selain PDF, deployment aplikasi penuh ke cloud, dan sinkronisasi knowledge base antar-PC.
 
 Tidak ada link PDF atau fasilitas download dokumen untuk pengguna chat. Tanpa klasifikasi/hak akses dokumen, seluruh isi knowledge base aktif berpotensi dijawab oleh SIRA; referensi non-clickable tidak membatasi pengungkapan isi melalui jawaban.
@@ -54,7 +54,7 @@ Tidak ada link PDF atau fasilitas download dokumen untuk pengguna chat. Tanpa kl
 | --- | --- | --- |
 | Frontend | React, TypeScript, Vite, CSS | UI chat dan admin yang rapi serta responsif |
 | Backend lokal | Python, FastAPI, Uvicorn | API, autentikasi, ingestion, retrieval, percakapan, penyajian hasil build frontend |
-| Data aplikasi | SQLite | Akun admin, metadata dokumen, halaman, teks ekstraksi, status pekerjaan |
+| Data aplikasi | SQLite | Akun admin, metadata dokumen, halaman, teks ekstraksi, status pekerjaan, riwayat/konteks percakapan |
 | Vector database | ChromaDB dengan PersistentClient | Embedding dan pencarian kemiripan lokal |
 | File dokumen | Folder data lokal di luar aset publik frontend | PDF asli dan artefak pemrosesan yang diperlukan |
 | Ekstraksi PDF | pdfplumber | Ekstraksi teks per halaman dan bantuan pembacaan struktur/tabel |
@@ -208,9 +208,10 @@ Jika knowledge base kosong, tampilkan sapaan dan pemberitahuan bahwa belum ada d
 
 Sesi chat:
 
-- Riwayat bersifat sementara; tidak dipulihkan saat membuka ulang chat atau memuat ulang halaman.
-- Tombol percakapan baru langsung mereset konteks.
-- Penutupan tab tidak selalu menghasilkan notifikasi ke backend. Jika backend menyimpan konteks sementara, gunakan kedaluwarsa/cleanup dan jangan mengandalkan event tutup tab saja.
+- Riwayat dan konteks disimpan di SQLite, dipulihkan saat refresh, buka ulang browser yang sama, serta restart aplikasi. Browser hanya menyimpan token sesi acak pada localStorage; hash token dipakai di backend.
+- Tombol Percakapan baru menghapus pesan/konteks sesi lama dan mencabut token lama. Reset diterapkan pada tab lain dalam browser yang sama melalui perubahan penanda sesi.
+- Tidak ada kedaluwarsa percakapan karena idle. Cache objek sesi dapat dikeluarkan dari memori dan dimuat ulang dari database tanpa kehilangan konteks. Riwayat jawaban model tidak diteruskan sebagai sumber fakta; hanya pertanyaan terdahulu yang dipakai untuk memahami maksud.
+- Jawaban yang terputus tetap tersimpan sebagai belum selesai; pemulihan riwayat tidak memanggil model ulang. Kegagalan memuat riwayat tidak diam-diam membuat sesi kosong.
 - Menghapus dokumen juga mencegah konteks dokumen lama dipakai kembali pada giliran berikutnya; riwayat tidak boleh menghidupkan sumber yang sudah dihapus.
 
 ## 8. UI dan keamanan
@@ -281,7 +282,7 @@ Target pembagian waktu awal: 8 Oktober rancangan/fondasi; 9-10 Oktober relay dan
 | Ambiguitas | Follow-up yang punya lebih dari satu tafsir | Meminta klarifikasi tanpa menebak fakta |
 | Tidak tersedia | Pertanyaan di luar isi KB | Pernyataan sopan bahwa informasi belum ditemukan |
 | Konflik | Fixture uji dua ketentuan berbeda | Perbedaan dan sumber dijelaskan, tanpa keputusan yang tidak didukung |
-| Sesi | Percakapan baru, refresh, tutup lalu buka chat | Riwayat/konteks sebelumnya tidak dipulihkan |
+| Sesi | Refresh, tutup/buka chat, restart aplikasi, Percakapan baru | Riwayat/konteks tetap tersedia; hanya Percakapan baru menghapus sesi lama dan memulai kosong |
 | Injection | Instruksi abaikan aturan, role palsu, serangan multi-turn dan dokumen | Tidak mengubah aturan, membocorkan rahasia, atau menjalankan tindakan admin |
 | Admin | Endpoint admin dipanggil tanpa sesi valid | Ditolak backend; bukan hanya diarahkan oleh UI |
 | Referensi | Sumber valid, ID sumber palsu, markdown link dari model | Hanya referensi valid berupa teks; tidak ada link/download PDF |

@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 INSERT OR IGNORE INTO meta VALUES ('schema_version',1),('kb_revision',0);
 CREATE TABLE IF NOT EXISTS admin(id INTEGER PRIMARY KEY CHECK(id=1), username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS admin_sessions(token_hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS chat_sessions(token_hash TEXT PRIMARY KEY, revision INTEGER NOT NULL, questions TEXT NOT NULL DEFAULT '[]', search_context TEXT NOT NULL DEFAULT '', updated REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS chat_messages(id INTEGER PRIMARY KEY AUTOINCREMENT, session_hash TEXT NOT NULL REFERENCES chat_sessions(token_hash) ON DELETE CASCADE, content TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS chat_messages_session ON chat_messages(session_hash,id);
 CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY, title TEXT NOT NULL, filename TEXT NOT NULL, active_version TEXT, pending_version TEXT, deleted INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id), path TEXT NOT NULL, sha256 TEXT NOT NULL, size INTEGER NOT NULL, status TEXT NOT NULL, stage TEXT NOT NULL DEFAULT 'Menunggu antrean', progress INTEGER NOT NULL DEFAULT 0, page_count INTEGER NOT NULL DEFAULT 0, warning TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS pages(version_id TEXT NOT NULL REFERENCES versions(id), number INTEGER NOT NULL, text TEXT NOT NULL, method TEXT NOT NULL, warning TEXT NOT NULL, PRIMARY KEY(version_id,number));
@@ -37,7 +40,7 @@ class Database:
                     SELECT 1 FROM pages p WHERE p.version_id=review_pages.version_id
                     AND p.number=review_pages.number AND p.text=review_pages.text
                     AND (p.method IN ('text','blank','manual-reviewed-v1') OR p.method LIKE '%ai-4.1-mini-crops-v1'))""")
-            conn.execute("UPDATE meta SET value=4 WHERE key='schema_version' AND value<4")
+            conn.execute("UPDATE meta SET value=5 WHERE key='schema_version' AND value<5")
 
     @contextmanager
     def connect(self):
@@ -80,6 +83,9 @@ class Database:
             "UPDATE versions SET status='failed', stage='Terputus', error='Pemrosesan terputus. Gunakan Proses ulang.' WHERE status='processing'"
         )
         self.execute("DELETE FROM admin_sessions WHERE expires < ?", (time.time(),))
+        self.execute("""UPDATE chat_messages SET content=json_set(content,
+            '$.pending',json('false'),'$.error','Jawaban terputus sebelum selesai. Silakan kirim ulang pertanyaan.')
+            WHERE json_extract(content,'$.pending')=1""")
 
     def document_list(self):
         return self.rows("""SELECT d.id,d.title,d.filename,d.active_version,d.pending_version,d.created,

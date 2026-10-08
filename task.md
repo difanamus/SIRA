@@ -100,7 +100,7 @@ Aturan penggunaan:
 - [ ] Menguji daftar persyaratan agar jawaban tidak diam-diam tidak lengkap.
 - [x] Membuat referensi teks dari metadata sumber yang valid, tanpa link/download PDF.
 - [x] Menampilkan streaming dan menandai respons yang terputus sebagai belum selesai.
-- [x] Mereset konteks pada percakapan baru/refresh/buka ulang, dengan cleanup bila ada state backend.
+- [x] Mempertahankan riwayat dan konteks saat refresh/buka ulang/restart, serta menghapus sesi lama hanya melalui Percakapan baru sesuai keputusan terbaru pengguna.
 - [x] Memastikan sapaan serta pemberitahuan KB kosong tidak memanggil AI.
 - [x] Memperbaiki sapaan dengan nama SIRA agar tidak memunculkan peringatan referensi; pesan sapaan yang disertai pertanyaan dokumen tetap wajib sumber. Tes regresi dan browser desktop/mobile lulus.
 
@@ -156,7 +156,8 @@ Aturan penggunaan:
 - [ ] Pemilihan model/provider dan pengaturan API key melalui admin.
 - [ ] Klasifikasi serta hak akses dokumen per pengguna.
 - [ ] Format dokumen tambahan, deployment penuh ke cloud, dan sinkronisasi antar-PC.
-- [ ] Riwayat lintas sesi dan pengelolaan banyak akun/admin.
+- [x] Riwayat satu percakapan persisten lintas refresh/buka ulang/restart (dipindahkan ke prototype atas permintaan pengguna).
+- [ ] Daftar beberapa percakapan, sinkronisasi riwayat antarperangkat, dan pengelolaan banyak akun/admin.
 
 ## Catatan progres
 
@@ -176,3 +177,5 @@ Aturan penggunaan:
 - 8 Oktober 2026: pengguna telah mengonfirmasi halaman 10 dan 12. Indexing awal tertahan kuota relay, lalu diselesaikan sesuai permintaan pengguna dengan kuota sementara 9 juta dan batas server US$0,50 yang sama. Tiga request embedding/10.558 token, estimasi US$0,00021116 (sekitar Rp4); tidak ada vision atau OCR ulang. SBP aktif dengan 12 halaman/25 chunk; 25 vektor persisten mencakup halaman 1–12. Browser admin siap, health dua KB aktif/revision 2 setelah restart. Kuota kembali 2 juta; penggunaan lanjutan untuk chat tetap menunggu izin. Detail docs/sbp-live-ocr.md.
 
 - 8 Oktober 2026: pemilik meminta batas penggunaan aplikasi dihapus setelah chat tertahan. `TOTAL_QUOTA_ENABLED=false` menonaktifkan batas total request/unit serta anggaran biaya uji untuk seluruh endpoint AI. Riwayat counter/ID anggaran, secrets, rate limit, dan expiry dipertahankan. Versi aktif b0ada031-35af-436e-929c-c7ccdcd0105f. Type check, 7 tes policy/biaya, 10 runtime Worker, dan dry-run lulus. Tes browser nyata berhasil menampilkan jawaban GPT-4o mini tentang Perpol beserta satu referensi halaman, tanpa error kuota atau JavaScript. Tidak ada OCR ulang. Bukti di tmp/relay-no-total/.
+
+- 8 Oktober 2026: pengguna mengubah keputusan sesi: riwayat dan konteks kini persisten di SQLite schema 5, browser menyimpan penanda sesi; hanya Percakapan baru menghapus sesi lama dan mencabut tokennya. Refresh, navigasi admin, tutup/buka browser, serta restart aplikasi berhasil memulihkan riwayat. Tes follow-up setelah restart, isolasi sesi, reset, sumber, dan respons terputus lulus. Suite backend 40 lulus/1 live dilewati, lalu 8 regresi akhir lulus setelah penguncian cache dan tes pembatalan; Ruff/build UI lulus. Browser desktop/mobile menguji pemulihan gangguan history serta reset antar-tab tanpa panggilan OpenAI. Bukti docs/testing.md dan tmp/persistent-chat-ui/.

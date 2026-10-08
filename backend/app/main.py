@@ -45,6 +45,14 @@ class Question(StrictModel):
     question: str = Field(min_length=1, max_length=3000)
 
 
+class SessionLookup(StrictModel):
+    session_id: str = Field(min_length=20, max_length=100)
+
+
+class SessionCreate(StrictModel):
+    previous_session_id: str | None = Field(default=None, min_length=20, max_length=100)
+
+
 class ReviewVersion(StrictModel):
     version_id: str = Field(min_length=32, max_length=32)
 
@@ -479,11 +487,21 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         return {"ok": True}
 
     @app.post("/api/chat/sessions", tags=["Chat"])
-    def chat_session(request: Request):
+    def chat_session(request: Request, body: SessionCreate | None = None):
         ctx = request.app.state.ctx
         check_origin(request, settings)
         ctx.limiter.check("sessions:" + request.client.host, 20)
-        return {"session_id": ctx.chat.create()}
+        return {"session_id": ctx.chat.create(body.previous_session_id if body else None)}
+
+    @app.post("/api/chat/history", tags=["Chat"])
+    def chat_history(body: SessionLookup, request: Request):
+        ctx = request.app.state.ctx
+        check_origin(request, settings)
+        ctx.limiter.check("history:" + request.client.host, 120)
+        session = ctx.chat.get(body.session_id)
+        if not session:
+            raise HTTPException(410, "Percakapan sudah diganti atau tidak ditemukan. Silakan mulai percakapan baru.")
+        return {"messages": ctx.chat.history(session)}
 
     @app.post("/api/chat", tags=["Chat"])
     async def ask(body: Question, request: Request):
@@ -494,7 +512,7 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
             raise HTTPException(422, "Pertanyaan tidak boleh kosong.")
         session = ctx.chat.get(body.session_id)
         if not session:
-            raise HTTPException(410, "Sesi telah berakhir. Mulai percakapan baru.")
+            raise HTTPException(410, "Percakapan sudah diganti atau tidak ditemukan. Silakan mulai percakapan baru.")
         if session.lock.locked():
             raise HTTPException(409, "Tunggu hingga jawaban sebelumnya selesai.")
         ctx.limiter.check("chat:" + request.client.host, 15)

@@ -31,7 +31,7 @@ class Settings:
     max_pages: int = field(default_factory=lambda: int(os.getenv("SIRA_MAX_PAGES", "300")))
     vision_enabled: bool = field(default_factory=lambda: os.getenv("SIRA_VISION_ENABLED", "true").lower() == "true")
     max_upload: int = 100 * 1024 * 1024
-    session_ttl: int = 1800
+    session_cache_ttl: int = 1800
 
     def __post_init__(self):
         self.data_dir = (ROOT / self.data_dir).resolve()

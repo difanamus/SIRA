@@ -1,5 +1,6 @@
 """Offline integration tests. FakeAI exercises transport/lifecycle, not GPT accuracy."""
 
+import asyncio
 import json
 import time
 
@@ -110,6 +111,104 @@ def test_empty_kb_and_session_do_not_call_ai(harness):
     assert any("belum ada dokumen" in e.get("text", "") for e in events)
     assert ai.embeddings == 0 and not ai.payloads
     assert ctx.db.active_versions() == []
+
+
+def test_chat_history_and_followup_survive_idle_cache_loss_and_app_restart(harness):
+    client, ctx, ai, settings = harness
+    wait_document(ctx, upload(client))
+    sid = session(client)
+    ask(client, sid, "Apa persyaratan pendidikan SBP?")
+    initial = client.post("/api/chat/history", json={"session_id": sid}).json()["messages"]
+    assert len(initial) == 2 and initial[1]["sources"][0]["page"] == 1
+    assert not initial[1]["pending"]
+    calls = ai.embeddings
+    ctx.chat.get(sid).updated -= settings.session_cache_ttl + 1
+    ctx.chat.create()  # Eviction is a memory optimization, not session expiry.
+    assert sid not in ctx.chat.sessions
+    assert ctx.chat.get(sid).questions == ["Apa persyaratan pendidikan SBP?"]
+    second = create_app(settings=settings, relay=ai, start_ingestion=False)
+    with TestClient(second) as other:
+        history = other.post("/api/chat/history", json={"session_id": sid})
+        assert history.status_code == 200 and history.json()["messages"] == initial
+        assert ai.embeddings == calls  # Restoring history has no AI calls.
+        result = ask(other, sid, "kalau SMA?")
+        assert result[-1]["type"] == "done"
+        assert ai.payloads[-1]["history"] == ["Apa persyaratan pendidikan SBP?"]
+        assert "pendidikan SBP" in second.state.ctx.chat.get(sid).search_context
+
+
+def test_new_chat_revokes_old_session_and_history_is_isolated(harness):
+    client, ctx, _, _ = harness
+    sid = session(client)
+    ask(client, sid, "Apa syarat SBP?")
+    other = session(client)
+    assert client.post("/api/chat/history", json={"session_id": other}).json()["messages"] == []
+    assert client.post("/api/chat/history", json={"session_id": "x" * 43}).status_code == 410
+    assert (
+        client.post(
+            "/api/chat/history", json={"session_id": sid}, headers={"Origin": "https://attacker.example"}
+        ).status_code
+        == 403
+    )
+    reset = client.post("/api/chat/sessions", json={"previous_session_id": sid})
+    assert reset.status_code == 200
+    replacement = reset.json()["session_id"]
+    assert replacement != sid
+    assert client.post("/api/chat/history", json={"session_id": replacement}).json()["messages"] == []
+    assert client.post("/api/chat/history", json={"session_id": sid}).status_code == 410
+    assert client.post("/api/chat", json={"session_id": sid, "question": "kalau SMA?"}).status_code == 410
+    assert not ctx.db.rows("SELECT * FROM chat_messages")
+    assert not ctx.chat.get(replacement).questions
+    assert sid not in str(ctx.db.rows("SELECT * FROM chat_sessions"))
+
+
+def test_restart_retains_partial_reply_as_interrupted_without_using_it_as_context(harness):
+    client, ctx, ai, settings = harness
+    sid = session(client)
+    token_hash = ctx.chat.get(sid).token_hash
+    ctx.db.execute(
+        "INSERT INTO chat_messages(session_hash,content) VALUES (?,?)",
+        (
+            token_hash,
+            json.dumps({"role": "assistant", "text": "Jawaban belum lengkap", "pending": True}),
+        ),
+    )
+    second = create_app(settings=settings, relay=ai, start_ingestion=False)
+    with TestClient(second) as other:
+        message = other.post("/api/chat/history", json={"session_id": sid}).json()["messages"][0]
+        assert message["text"] == "Jawaban belum lengkap" and not message["pending"]
+        assert "terputus" in message["error"]
+        assert second.state.ctx.chat.get(sid).questions == []
+    assert not ai.payloads and ai.embeddings == 0
+
+
+def test_abandoned_stream_preserves_partial_history_until_new_chat(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    sid = session(client)
+
+    async def interrupted(payload):
+        yield "Jawaban sedang disusun"
+        await asyncio.sleep(10)
+
+    ai.answer = interrupted
+
+    async def leave():
+        stream = ctx.chat.stream(ctx.chat.get(sid), "Apa ketentuan pendidikan?")
+        try:
+            async for packet in stream:
+                if json.loads(packet[5:])["type"] == "delta":
+                    break
+        finally:
+            await stream.aclose()
+
+    asyncio.run(leave())
+    messages = client.post("/api/chat/history", json={"session_id": sid}).json()["messages"]
+    assert len(messages) == 2 and messages[-1]["text"] == "Jawaban sedang disusun"
+    assert not messages[-1]["pending"] and "terputus" in messages[-1]["error"]
+    assert ctx.chat.get(sid).questions == []
+    replacement = ctx.chat.create(sid)
+    assert ctx.chat.get(sid) is None and ctx.chat.history(ctx.chat.get(replacement)) == []
 
 
 def test_auth_csrf_origin_host_and_spoofed_roles(harness):
@@ -476,6 +575,9 @@ def test_stream_failure_marks_partial_answer_and_does_not_keep_history(harness):
     events = ask(client, sid, "Apa ketentuannya?")
     assert events[-1]["type"] == "error"
     assert not ctx.chat.get(sid).questions
+    history = client.post("/api/chat/history", json={"session_id": sid}).json()["messages"]
+    assert history[-1]["text"] == "Sebagian jawaban" and not history[-1]["pending"]
+    assert "terputus" in history[-1]["error"] and not history[-1]["sources"]
 
 
 def test_missing_citation_is_not_labelled_complete(harness):

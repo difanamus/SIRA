@@ -180,24 +180,92 @@ type Message = {
   sources?: Source[];
   error?: string;
   notice?: string;
+  pending?: boolean;
 };
+const CHAT_SESSION_KEY = 'sira.chat.session.v1';
+function savedChatSession() {
+  try {
+    const value = localStorage.getItem(CHAT_SESSION_KEY) ?? '';
+    return /^[A-Za-z0-9_-]{43}$/.test(value) ? value : '';
+  } catch {
+    return '';
+  }
+}
 const welcome: Message = {
   role: 'assistant',
   text: 'Selamat datang. Saya SIRA, Asisten Informasi SDM Polri. Silakan ajukan pertanyaan mengenai informasi dalam dokumen yang tersedia.',
 };
 
 function Chat({ health }: { health: Health | null }) {
+  const [initialSession] = useState(savedChatSession);
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
-  const session = useRef('');
+  const session = useRef(initialSession);
+  const [restoring, setRestoring] = useState(Boolean(initialSession));
+  const [restoreError, setRestoreError] = useState('');
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [resetting, setResetting] = useState(false);
+  const [storageWarning, setStorageWarning] = useState('');
   const abort = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => {
+    const token = session.current;
+    if (!token) return;
+    const current = generation.current;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+    async function restore() {
+      if (cancelled || current !== generation.current) return;
+      try {
+        const result = await api<{ messages: Message[] }>('/chat/history', {
+          method: 'POST',
+          body: JSON.stringify({ session_id: token }),
+          signal: controller.signal,
+        });
+        if (cancelled || current !== generation.current) return;
+        setMessages(result.messages);
+        setRestoreError('');
+        const pending = result.messages.some((message) => message.pending);
+        setRestoring(pending);
+        if (pending) timer = setTimeout(restore, 1000);
+      } catch (exc) {
+        if (cancelled || current !== generation.current) return;
+        setRestoreError(exc instanceof Error ? exc.message : 'Riwayat belum dapat dimuat.');
+        setRestoring(true);
+      }
+    }
+    restore();
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [restoreAttempt]);
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === CHAT_SESSION_KEY && event.newValue !== session.current) location.reload();
+    };
+    window.addEventListener('storage', changed);
+    return () => window.removeEventListener('storage', changed);
+  }, []);
+  function rememberSession(token: string) {
+    session.current = token;
+    try {
+      localStorage.setItem(CHAT_SESSION_KEY, token);
+      setStorageWarning('');
+    } catch {
+      setStorageWarning(
+        'Browser tidak dapat menyimpan sesi. Izinkan penyimpanan situs agar percakapan dapat dibuka kembali.',
+      );
+    }
+  }
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: busy ? 'instant' : 'smooth', block: 'end' });
   }, [messages, status, busy]);
@@ -205,20 +273,36 @@ function Chat({ health }: { health: Health | null }) {
     setMessages((previous) =>
       previous.map((item, i) => (i === previous.length - 1 ? { ...item, ...update } : item)),
     );
-  const reset = () => {
-    generation.current++;
+  const reset = async () => {
+    const current = ++generation.current;
     abort.current?.abort();
-    session.current = '';
-    setMessages([]);
-    setQuestion('');
-    setError('');
     setBusy(false);
-    setStatus('');
-    input.current?.focus();
+    setResetting(true);
+    setRestoring(true);
+    try {
+      const result = await api<{ session_id: string }>('/chat/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ previous_session_id: session.current || null }),
+      });
+      if (current !== generation.current) return;
+      rememberSession(result.session_id);
+      setMessages([]);
+      setQuestion('');
+      setError('');
+      setRestoreError('');
+      setRestoring(false);
+      setStatus('');
+      input.current?.focus();
+    } catch (exc) {
+      setRestoreError(exc instanceof Error ? exc.message : 'Percakapan baru belum dapat dibuat.');
+    } finally {
+      setResetting(false);
+      setRestoreAttempt((value) => value + 1);
+    }
   };
   async function send(value = question) {
     const text = value.trim();
-    if (!text || busy) return;
+    if (!text || busy || restoring || resetting) return;
     const current = ++generation.current;
     setBusy(true);
     setError('');
@@ -227,19 +311,20 @@ function Chat({ health }: { health: Health | null }) {
     setMessages((previous) => [
       ...previous,
       { role: 'user', text },
-      { role: 'assistant', text: '' },
+      { role: 'assistant', text: '', pending: true },
     ]);
     abort.current = new AbortController();
     let answer = '',
       complete = false;
     try {
-      if (!session.current)
-        session.current = (
-          await api<{ session_id: string }>('/chat/sessions', {
-            method: 'POST',
-            signal: abort.current.signal,
-          })
-        ).session_id;
+      if (!session.current) {
+        const result = await api<{ session_id: string }>('/chat/sessions', {
+          method: 'POST',
+          signal: abort.current.signal,
+        });
+        if (current !== generation.current) return;
+        rememberSession(result.session_id);
+      }
       if (current !== generation.current) return;
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -249,7 +334,6 @@ function Chat({ health }: { health: Health | null }) {
       });
       if (!response.ok) {
         const body = await response.json();
-        if (response.status === 410) session.current = '';
         throw new Error(body.detail ?? 'Permintaan belum berhasil.');
       }
       const reader = response.body!.getReader(),
@@ -281,7 +365,7 @@ function Chat({ health }: { health: Health | null }) {
           }
           if (data.type === 'done') {
             complete = true;
-            patch({ sources: data.sources });
+            patch({ sources: data.sources, pending: false });
           }
           if (data.type === 'error') throw new Error(data.message);
         }
@@ -293,7 +377,7 @@ function Chat({ health }: { health: Health | null }) {
         !(exc instanceof DOMException && exc.name === 'AbortError')
       ) {
         const message = exc instanceof Error ? exc.message : 'Jawaban belum dapat diselesaikan.';
-        patch({ error: message });
+        patch({ error: message, pending: false });
         setError(message);
       }
     } finally {
@@ -313,11 +397,27 @@ function Chat({ health }: { health: Health | null }) {
           <h1>Percakapan dengan SIRA</h1>
           <p>Temukan informasi SDM melalui dokumen yang tersedia.</p>
         </div>
-        <button className="button secondary" onClick={reset}>
+        <button className="button secondary" onClick={reset} disabled={resetting}>
           <Icon name="plus" size={17} />
           Percakapan baru
         </button>
       </div>
+      {storageWarning && (
+        <div className="alert error" role="alert">
+          {storageWarning}
+        </div>
+      )}
+      {restoreError && (
+        <div className="alert error" role="alert">
+          <span>{restoreError}</span>
+          <button
+            className="button secondary compact"
+            onClick={() => setRestoreAttempt((value) => value + 1)}
+          >
+            Muat ulang riwayat
+          </button>
+        </div>
+      )}
       <div className="chat-layout">
         <div className="chat-card">
           <div className="chat-card-header">
@@ -333,7 +433,11 @@ function Chat({ health }: { health: Health | null }) {
             <span className="subtle-tag">{count} dokumen tersedia</span>
           </div>
           <div className="messages" aria-live="polite" aria-relevant="additions text">
-            {messages.length === 0 ? (
+            {restoring && messages.length === 0 && !restoreError ? (
+              <div className="welcome">
+                <p>Memuat percakapan...</p>
+              </div>
+            ) : messages.length === 0 ? (
               <div className="welcome">
                 <div className="welcome-icon">
                   <Icon name="chat" size={32} />
@@ -355,7 +459,11 @@ function Chat({ health }: { health: Health | null }) {
                       'Bagaimana ketentuan penilaian kinerja anggota Polri?',
                       'Apa persyaratan mengikuti SBP T.A. 2027?',
                     ].map((text) => (
-                      <button onClick={() => send(text)} key={text}>
+                      <button
+                        onClick={() => send(text)}
+                        key={text}
+                        disabled={restoring || resetting}
+                      >
                         {text}
                         <Icon name="arrow" size={18} />
                       </button>
@@ -426,7 +534,7 @@ function Chat({ health }: { health: Health | null }) {
                 onChange={(event) => setQuestion(event.target.value)}
                 placeholder="Tuliskan pertanyaan Anda..."
                 aria-label="Pertanyaan untuk SIRA"
-                disabled={busy}
+                disabled={busy || restoring || resetting}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault();
@@ -437,14 +545,19 @@ function Chat({ health }: { health: Health | null }) {
               <button
                 className="send-button"
                 type="submit"
-                disabled={busy || !question.trim()}
+                disabled={busy || restoring || resetting || !question.trim()}
                 aria-label="Kirim pertanyaan"
               >
                 {busy ? <span className="spinner" /> : <Icon name="arrow" />}
               </button>
             </div>
             <div className="composer-caption">
-              <span>{status || 'Enter untuk mengirim · Shift + Enter untuk baris baru'}</span>
+              <span>
+                {status ||
+                  (restoring
+                    ? 'Memulihkan percakapan...'
+                    : 'Enter untuk mengirim · Shift + Enter untuk baris baru')}
+              </span>
               <span>{question.length}/3000</span>
             </div>
           </form>
@@ -486,7 +599,7 @@ function Chat({ health }: { health: Health | null }) {
         </span>
       )}
       <p className="page-footnote">
-        Percakapan tidak disimpan setelah halaman dimuat ulang atau ditutup.
+        Riwayat tetap tersimpan pada browser ini. Pilih Percakapan baru untuk mengulang dari awal.
       </p>
     </section>
   );
@@ -880,7 +993,9 @@ function Admin({ health }: { health: Health | null }) {
                         </details>
                       )}
                       {doc.ocr_mode === 'ai' && (
-                        <p className="document-meta">OCR lokal → GPT-4.1 mini → GPT-5.6 Sol untuk bagian meragukan</p>
+                        <p className="document-meta">
+                          OCR lokal → GPT-4.1 mini → GPT-5.6 Sol untuk bagian meragukan
+                        </p>
                       )}
                       {editing === doc.id ? (
                         <form
