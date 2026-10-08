@@ -34,3 +34,15 @@ Selesai ingestion, batas unit kembali **2 juta** dan anggaran server ID yang sam
 - 7 tes policy/biaya dan 9 tes runtime Worker lulus dengan key palsu. Type check/dry-run lulus. Tes mencakup anggaran bersama sebelum upstream, settlement, reservasi serentak, override klien, anggaran invalid, dan kegagalan upstream yang menahan biaya.
 - Build frontend lulus. Aplikasi direstart setelah ingestion selesai. Browser nyata desktop 1440×1100 dan mobile 390×844 menampilkan hanya nomor halaman 10 dan 12, langsung membuka 10, preview crop berhasil, dan ada keterangan bagian yang sudah diperiksa Sol tetapi belum lolos. Mode seluruh halaman menampilkan 12 nomor. Tombol indeks tetap ditahan sebelum konfirmasi. Tanpa error JavaScript/overflow horizontal atau panggilan AI tambahan.
 - Health tetap satu dokumen aktif (Perpol), revision 1. Tidak ada konfirmasi manual, aktivasi SBP, atau penilaian akurasi seluruh teks oleh manusia pada uji ini.
+
+## Setelah review manusia: indeks berhasil
+
+Pengguna kemudian mengonfirmasi halaman 10 dan 12 melalui admin dan menjalankan indexing. Review tersimpan, tetapi embedding ditolak karena kuota unit relay sudah kembali 2 juta. Pada tahap ini mode versi `manual`, seluruh 12 teks telah diterima, tanpa chunk baru; error tersebut adalah batas layanan, bukan penolakan hasil review.
+
+Atas permintaan pengguna untuk menyelesaikan kegagalan itu, kuota sementara **9 juta unit** digunakan hanya selama pembuatan indeks. Anggaran server US$0,50 memakai ID yang sama, tanpa reset. Skrip menolak seluruh operasi selain embedding, maksimum empat request dan tambahan US$0,01, serta selalu memulihkan versi relay sebelumnya. Tidak ada vision atau chat.
+
+Hasil: **3 request embedding**, 10.558 token input, **US$0,00021116** (sekitar Rp4 dengan asumsi Rp17.000/US$). Dua batch masing-masing 12 chunk dan satu batch 1 chunk selesai. SBP kini **aktif/ready**, 12 halaman dan **25 chunk/vektor persisten** yang mencakup PDF halaman 1–12. Aplikasi direstart, browser admin menunjukkan siap digunakan, health dua dokumen aktif/revision 2, tanpa error JavaScript. Pemeriksaan Chroma dari proses terpisah memastikan semua vektor tersimpan. Tidak ada OCR ulang atau perubahan teks/konfirmasi tambahan oleh agen.
+
+Total OCR nyata di laporan ini dan indexing tersebut sekitar **US$0,11437396**. Ini tidak mencakup uji pembanding sebelumnya atau pemakaian pengguna yang tidak tercatat dalam ledger skrip.
+
+Relay sudah dipulihkan ke versi **ff6e5a0e-1d8f-4d08-bdae-8a4663c81c69**, batas unit 2 juta dan anggaran server US$0,50 yang sama. Izin untuk mempertahankan kuota lebih tinggi bagi chat demo belum diberikan; jangan menyatakan panggilan chat sudah kembali tersedia hanya karena dokumen siap. Bukti lokal berada di `tmp/sbp-index-confirmed/`, diabaikan Git.

@@ -84,7 +84,7 @@ Aturan penggunaan:
 - [ ] Memverifikasi hasil 12 halaman scan terhadap sumber, terutama angka, pangkat, pendidikan, tanggal, dan negasi.
 - [x] Menampilkan keterangan akurasi OCR serta rencana pratinjau/koreksi manual secara jelas di admin.
 - [x] Menyediakan review gambar dan editor teks per halaman, draft persisten, konfirmasi admin, serta aktivasi setelah embedding berhasil.
-- [ ] Menyelesaikan ingestion pengumuman SBP dan memeriksa metadata halaman.
+- [x] Menyelesaikan ingestion pengumuman SBP dan memeriksa metadata halaman: 12 halaman, 25 chunk/vektor persisten, aktif setelah pengguna mengonfirmasi halaman 10 dan 12.
 
 ## 5. Retrieval, jawaban, dan sesi chat
 
@@ -170,3 +170,5 @@ Aturan penggunaan:
 - 8 Oktober 2026: uji berbayar kecil atas izin pengguna selesai: dua GPT-4.1 mini dan satu GPT-5.6 Sol pada crop halaman 3 (16,77% tinggi halaman), semua HTTP 200. Nomor 23, tanggal 14 September 2026, semester II 2025/I 2026 cocok pada pemeriksaan visual. Total estimasi US$0,0098264 (sekitar Rp167 dengan asumsi Rp17.000/US$), Sol 4,216 detik. Mini sudah sepakat, jadi Sol diuji sebagai pembanding, bukan bukti eskalasi otomatis memperbaiki kesalahan. Kuota sementara 2,4 juta dipulihkan ke 2 juta, tanpa reset counter atau aktivasi SBP. Rincian di `docs/testing.md`.
 
 - 8 Oktober 2026: pipeline benar-benar diterapkan pada SBP tersimpan; cache halaman 1–4 dipertahankan, halaman 5–12 diproses. 86 mini + 5 Sol, estimasi US$0,1141628 (sekitar Rp1.941 dengan asumsi Rp17.000/US$). Sol memperbaiki baris terlewat di halaman 8. Sepuluh halaman lolos, halaman 10 dan 12 menunggu manusia; tidak ada konfirmasi palsu/aktivasi SBP. Admin desktop/mobile hanya menampilkan dua halaman itu secara default dan menyebut bagian yang sudah diperiksa Sol. Anggaran US$0,50 kini ditegakkan di server; unit kembali 2 juta, versi ff6e5a0e-1d8f-4d08-bdae-8a4663c81c69. Penggunaan sisa anggaran untuk indeks/chat berikutnya menunggu izin setelah ditolak pemeriksaan otomatis. 35 backend lulus/1 live dilewati, 7 policy/biaya + 9 runtime Worker lulus, build UI lulus. Detail docs/sbp-live-ocr.md.
+
+- 8 Oktober 2026: pengguna telah mengonfirmasi halaman 10 dan 12. Indexing awal tertahan kuota relay, lalu diselesaikan sesuai permintaan pengguna dengan kuota sementara 9 juta dan batas server US$0,50 yang sama. Tiga request embedding/10.558 token, estimasi US$0,00021116 (sekitar Rp4); tidak ada vision atau OCR ulang. SBP aktif dengan 12 halaman/25 chunk; 25 vektor persisten mencakup halaman 1–12. Browser admin siap, health dua KB aktif/revision 2 setelah restart. Kuota kembali 2 juta; penggunaan lanjutan untuk chat tetap menunggu izin. Detail docs/sbp-live-ocr.md.
