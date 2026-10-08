@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, document_id TEXT NOT NU
 CREATE TABLE IF NOT EXISTS pages(version_id TEXT NOT NULL REFERENCES versions(id), number INTEGER NOT NULL, text TEXT NOT NULL, method TEXT NOT NULL, warning TEXT NOT NULL, PRIMARY KEY(version_id,number));
 CREATE TABLE IF NOT EXISTS review_pages(version_id TEXT NOT NULL REFERENCES versions(id), number INTEGER NOT NULL, text TEXT NOT NULL, method TEXT NOT NULL, warning TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(version_id,number));
 CREATE TABLE IF NOT EXISTS ocr_regions(version_id TEXT NOT NULL REFERENCES versions(id), page INTEGER NOT NULL, number INTEGER NOT NULL, top REAL NOT NULL, bottom REAL NOT NULL, state TEXT NOT NULL, text TEXT NOT NULL, method TEXT NOT NULL, warning TEXT NOT NULL, required INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(version_id,page,number));
+CREATE TABLE IF NOT EXISTS ocr_page_jobs(version_id TEXT NOT NULL REFERENCES versions(id), page INTEGER NOT NULL, plan TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', elapsed_ms INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(version_id,page));
 CREATE TABLE IF NOT EXISTS chunks(id TEXT PRIMARY KEY, version_id TEXT NOT NULL REFERENCES versions(id), page INTEGER NOT NULL, heading TEXT NOT NULL, text TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS chunks_version ON chunks(version_id);
 CREATE INDEX IF NOT EXISTS versions_doc ON versions(document_id);
@@ -40,7 +41,7 @@ class Database:
                     SELECT 1 FROM pages p WHERE p.version_id=review_pages.version_id
                     AND p.number=review_pages.number AND p.text=review_pages.text
                     AND (p.method IN ('text','blank','manual-reviewed-v1') OR p.method LIKE '%ai-4.1-mini-crops-v1'))""")
-            conn.execute("UPDATE meta SET value=5 WHERE key='schema_version' AND value<5")
+            conn.execute("UPDATE meta SET value=6 WHERE key='schema_version' AND value<6")
 
     @contextmanager
     def connect(self):

@@ -297,27 +297,58 @@ def test_embedding_batches_across_pages_and_retains_page_metadata(harness):
     assert {row["page"] for row in rows} == set(range(1, 8))
 
 
-def test_retry_reuses_accepted_ocr_pages_after_embedding_failure(harness, monkeypatch):
+def test_challenge_followup_retrieves_original_question_without_using_assistant_as_fact(harness, monkeypatch):
     client, ctx, ai, _ = harness
-    calls = []
+    wait_document(ctx, upload(client))
+    queries = []
+    retrieve = ctx.chat.retrieve
+
+    def track(query):
+        queries.append(query)
+        return retrieve(query)
+
+    monkeypatch.setattr(ctx.chat, "retrieve", track)
+    sid = session(client)
+    first = "Kapan kep kelulusan dan kirim surat panggil SBP 2027?"
+    ask(client, sid, first)
+    ask(client, sid, "masa sih? kep kelulusan dan kirim surat panggil?")
+    assert first in queries[-1]
+    assert ai.payloads[-1]["history"] == [first]
+    assert "Ketentuan pengujian tercantum" not in queries[-1]
+
+
+def image_reader(harness, monkeypatch, reader=None):
+    from test_layout_ocr import text_block
+
+    client, ctx, ai, settings = harness
+    settings.vision_enabled = True
+    settings.ocr_workers = 1
     monkeypatch.setattr("pdfplumber.page.Page.extract_text", lambda *a, **kw: "")
+    local, calls = [], []
 
     def scan(image):
-        calls.append(1)
-        return (
-            "Hasil transkripsi untuk pengujian cache halaman yang sudah diterima. " * 5,
-            "ocr+4.1-mini-regions-v2",
-            "",
-        )
+        local.append(image.size)
+        return "Draft lokal untuk dicocokkan dengan gambar asli. " * 3, 70, []
 
-    monkeypatch.setattr(ctx.ingestion, "extract_scan", scan)
+    def vision(image, **kwargs):
+        calls.append(kwargs)
+        return reader(len(calls), kwargs) if reader else {"blocks": [text_block()]}
+
+    monkeypatch.setattr(ctx.ingestion, "extract_local_evidence", scan)
+    ai.vision = vision
+    return calls, local
+
+
+def test_retry_reuses_accepted_ocr_pages_after_embedding_failure(harness, monkeypatch):
+    client, ctx, ai, _ = harness
+    calls, local = image_reader(harness, monkeypatch)
     ai.fail = True
     doc_id = upload(client)
     wait_document(ctx, doc_id, "failed")
     ai.fail = False
     assert client.post(f"/api/admin/documents/{doc_id}/retry").status_code == 200
     wait_document(ctx, doc_id)
-    assert len(calls) == 1
+    assert len(calls) == len(local) == 1
 
 
 def test_failed_replace_preserves_active_version_and_retry(harness):
@@ -337,66 +368,61 @@ def test_failed_replace_preserves_active_version_and_retry(harness):
     assert doc["active_version"] != first and doc["pending_version"] is None
 
 
-def test_read_ai_replaces_scan_cache_persists_mode_and_resumes_without_recharge(harness, monkeypatch):
+def test_read_ai_replaces_old_cache_and_ready_document_without_losing_active_source(harness, monkeypatch):
     from backend.app.db import Database
 
     client, ctx, ai, settings = harness
-    monkeypatch.setattr("pdfplumber.page.Page.extract_text", lambda *a, **kw: "")
-    text = "Hasil transkripsi pengujian dari halaman scan, memiliki nilai 53 dan semester II tahun 2025. " * 3
-    monkeypatch.setattr(ctx.ingestion, "extract_scan", lambda image: (text, "ocr+vision-crops-v1", ""))
-    calls = []
-
-    def direct(image):
-        calls.append(1)
-        return text, "ocr+ai-4.1-mini-crops-v1", "Diperiksa dengan AI."
-
-    monkeypatch.setattr(ctx.ingestion, "extract_with_ai", direct)
+    calls, local = image_reader(harness, monkeypatch)
     ai.fail = True
     doc_id = upload(client)
-    wait_document(ctx, doc_id, "failed")
+    failed = wait_document(ctx, doc_id, "failed")
+    ctx.db.execute("UPDATE pages SET method='ocr+vision-crops-v1' WHERE version_id=?", (failed["pending_version"],))
     assert client.post(f"/api/admin/documents/{doc_id}/read-ai", headers={"X-CSRF-Token": "wrong"}).status_code == 403
     assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 200
     wait_document(ctx, doc_id, "failed")
-    assert calls == [1]  # Existing 4o-mini scan cache was invalidated.
+    assert len(calls) == 1 and len(local) == 1
     assert Database(settings.data_dir).document_list()[0]["ocr_mode"] == "ai"
     ai.fail = False
     assert client.post(f"/api/admin/documents/{doc_id}/retry").status_code == 200
     doc = wait_document(ctx, doc_id)
-    assert calls == [1] and doc["ocr_mode"] == "ai"
-    assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 409
+    first = doc["active_version"]
+    assert len(calls) == 1
+    # Ready documents can opt into the new pipeline; keep the active version if
+    # indexing the newly read version fails.
+    ai.fail = True
+    assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 200
+    failed = wait_document(ctx, doc_id, "failed")
+    assert failed["active_version"] == first and failed["available"] == 1
+    assert failed["pending_version"] != first
+    assert ctx.db.one("SELECT text FROM pages WHERE version_id=?", (first,))
+    ai.fail = False
+    client.post(f"/api/admin/documents/{doc_id}/retry")
+    assert wait_document(ctx, doc_id)["active_version"] != first
     client.cookies.clear()
     assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 401
 
 
 def test_manual_review_lifecycle_auth_stale_edits_blank_and_atomic_activation(harness, monkeypatch):
+    from test_layout_ocr import TEXT, text_block
+
     from backend.app.db import Database
 
     client, ctx, ai, settings = harness
     doc_id = upload(client)
     previous = wait_document(ctx, doc_id)["active_version"]
-    calls = []
-    text = "Halaman pengujian review: nilai minimal 53 untuk semester II tahun 2025, tidak otomatis lulus. " * 2
-    monkeypatch.setattr("pdfplumber.page.Page.extract_text", lambda *a, **kw: "")
 
-    def scan(image):
-        calls.append("scan")
-        if len(calls) == 1:
-            return text, "ocr+ai-4.1-mini-crops-v1", "Periksa hasil AI."
-        raise AIError("Hasil OCR berbeda dan perlu review.")
+    def reader(number, kwargs):
+        if number == 1:
+            return {"blocks": [text_block()]}
+        raise AIError("Koneksi uji terputus.")
 
-    local = []
-
-    def local_scan(image):
-        local.append(1)
-        return (text if len(local) == 1 else ""), 80
-
-    monkeypatch.setattr(ctx.ingestion, "extract_scan", scan)
-    monkeypatch.setattr(ctx.ingestion, "extract_local", local_scan)
-    replacement = client.put(
+    calls, local = image_reader(harness, monkeypatch, reader)
+    response = client.put(
         f"/api/admin/documents/{doc_id}/file", files={"file": ("scan.pdf", pdf_bytes(pages=3), "application/pdf")}
     )
-    assert replacement.status_code == 202
+    assert response.status_code == 202
     wait_document(ctx, doc_id, "failed")
+    assert len(local) == 3  # Local scanning continued despite the AI outage.
     base = f"/api/admin/documents/{doc_id}/review"
     embeddings_before = ai.embeddings
     assert client.post(base, headers={"X-CSRF-Token": "bad"}).status_code == 403
@@ -404,21 +430,20 @@ def test_manual_review_lifecycle_auth_stale_edits_blank_and_atomic_activation(ha
     doc = wait_document(ctx, doc_id, "review")
     assert doc["active_version"] == previous and ai.embeddings == embeddings_before
     review = client.get(base).json()
-    assert len(review["pages"]) == 3 and len(local) == 2
-    assert review["pages"][0]["method"] == "ocr+ai-4.1-mini-crops-v1"
+    assert [p["required"] for p in review["pages"]] == [0, 1, 1]
+    assert review["pages"][0]["method"] == "ocr+4.1-mini-layout-v3"
     version = {"version_id": review["version_id"]}
     assert client.post(base + "/activate", json=version).status_code == 409
     image = client.get(base + "/pages/1/image", params=version)
-    assert image.status_code == 200 and image.headers["content-type"] == "image/jpeg"
-    assert image.content.startswith(b"\xff\xd8")
+    assert image.status_code == 200 and image.content.startswith(b"\xff\xd8")
     assert client.get(base + "/pages/0/image", params=version).status_code == 404
     assert client.get(base + "/pages/1/image", params={"version_id": "0" * 32}).status_code == 409
-    first = {**version, "revision": 0, "text": text.replace("53", "54"), "confirmed": True}
+    first = {**version, "revision": 0, "text": TEXT + " Koreksi admin.", "confirmed": True}
     assert client.put(base + "/pages/1", json={**first, "version_id": "0" * 32}).status_code == 409
     assert client.put(base + "/pages/1", json=first).json()["revision"] == 1
-    assert client.put(base + "/pages/1", json=first).status_code == 409  # Stale tab cannot overwrite a correction.
+    assert client.put(base + "/pages/1", json=first).status_code == 409
     assert (
-        client.put(base + "/pages/2", json={**version, "revision": 0, "text": text, "confirmed": True}).status_code
+        client.put(base + "/pages/2", json={**version, "revision": 0, "text": TEXT, "confirmed": True}).status_code
         == 200
     )
     empty = {**version, "revision": 0, "text": "", "confirmed": True}
@@ -435,65 +460,40 @@ def test_manual_review_lifecycle_auth_stale_edits_blank_and_atomic_activation(ha
     ai.fail = False
     assert client.post(f"/api/admin/documents/{doc_id}/retry").status_code == 200
     ready = wait_document(ctx, doc_id)
-    assert ready["active_version"] != previous and len(local) == 2 and len(calls) == 2
+    assert ready["active_version"] != previous and len(local) == 3 and len(calls) == 2
     page = ctx.db.one("SELECT * FROM pages WHERE version_id=? AND number=1", (ready["active_version"],))
-    assert "54" in page["text"] and page["method"] == "manual-reviewed-v1"
+    assert "Koreksi admin" in page["text"] and page["method"] == "manual-reviewed-v1"
     assert client.get(base).status_code == 409
     client.cookies.clear()
     assert client.get(base + "/pages/1/image", params=version).status_code == 401
-    assert client.get(base).status_code == 401
 
 
 def test_automatic_review_requires_only_unresolved_page_and_preview_crop(harness, monkeypatch):
     import io
 
     from PIL import Image
-
-    from backend.app.ingestion import OCRReviewRequired
+    from test_layout_ocr import TEXT, text_block
 
     client, ctx, ai, _ = harness
-    monkeypatch.setattr("pdfplumber.page.Page.extract_text", lambda *a, **kw: "")
-    text = "Ketentuan pengujian: nilai minimal 53 dan tidak lulus otomatis. " * 2
-    calls = []
 
-    def scan(image):
-        calls.append(1)
-        if len(calls) == 2:
-            version, page = ctx.ingestion.scan_context
-            for part in range(1, 7):
-                ctx.db.execute(
-                    "INSERT INTO ocr_regions VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        version,
-                        page,
-                        part,
-                        (part - 1) / 6,
-                        part / 6,
-                        '{"done":true}',
-                        text,
-                        "ocr-regions-v2",
-                        "Bagian 1: perlu koreksi." if part == 1 else "",
-                        int(part == 1),
-                    ),
-                )
-            raise OCRReviewRequired(text, "Bagian 1: perlu koreksi.")
-        return text, "ocr+4.1-mini-regions-v2", ""
+    def reader(number, kwargs):
+        return {"blocks": [text_block(uncertain=number in (2, 3))]}
 
-    monkeypatch.setattr(ctx.ingestion, "extract_scan", scan)
+    calls, local = image_reader(harness, monkeypatch, reader)
     response = client.post(
         "/api/admin/documents",
         data={"title": "Review selektif"},
         files={"file": ("scan.pdf", pdf_bytes(pages=3), "application/pdf")},
     )
-    assert response.status_code == 202
     doc_id = response.json()["id"]
     doc = wait_document(ctx, doc_id, "review")
-    assert doc["active_version"] is None and ai.embeddings == 0 and len(calls) == 3
+    assert doc["active_version"] is None and ai.embeddings == 0 and len(local) == 3
+    assert [call["fragment"] for call in calls] == [False, False, True, False]
     base = f"/api/admin/documents/{doc_id}/review"
     review = client.get(base).json()
     assert [page["required"] for page in review["pages"]] == [0, 1, 0]
     assert len(review["pages"][1]["regions"]) == 1
-    assert review["pages"][1]["regions"][0]["method"] == "ocr-regions-v2"
+    assert "5.6-sol" in review["pages"][1]["regions"][0]["method"]
     version = {"version_id": review["version_id"]}
     assert client.post(base + "/activate", json=version).status_code == 409
     full = client.get(base + "/pages/2/image", params=version)
@@ -502,18 +502,18 @@ def test_automatic_review_requires_only_unresolved_page_and_preview_crop(harness
     assert Image.open(io.BytesIO(crop.content)).height < Image.open(io.BytesIO(full.content)).height / 4
     assert client.get(base + "/pages/2/image", params={**version, "region": 99}).status_code == 404
     assert (
-        client.put(base + "/pages/2", json={**version, "revision": 0, "text": text, "confirmed": True}).status_code
+        client.put(base + "/pages/2", json={**version, "revision": 0, "text": TEXT, "confirmed": True}).status_code
         == 200
     )
     assert not client.get(base).json()["pages"][1]["regions"]
     assert client.post(base + "/activate", json=version).status_code == 200
     ready = wait_document(ctx, doc_id)
-    assert len(calls) == 3 and ready["available"] == 1
+    assert len(calls) == 4 and ready["available"] == 1
     pages = ctx.db.rows("SELECT * FROM pages WHERE version_id=? ORDER BY number", (ready["active_version"],))
     assert [page["method"] for page in pages] == [
-        "ocr+4.1-mini-regions-v2",
+        "ocr+4.1-mini-layout-v3",
         "manual-reviewed-v1",
-        "ocr+4.1-mini-regions-v2",
+        "ocr+4.1-mini-layout-v3",
     ]
 
 

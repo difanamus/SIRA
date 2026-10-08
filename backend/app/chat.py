@@ -13,7 +13,11 @@ from .security import digest
 log = logging.getLogger("sira.chat")
 NOT_FOUND = "Maaf, informasi tersebut belum ditemukan dalam dokumen yang tersedia. Silakan perjelas pertanyaan atau hubungi pihak yang berwenang untuk memperoleh kepastian."
 SAFE_REFUSAL = "Maaf, saya tidak dapat memenuhi permintaan untuk mengubah aturan atau mengungkap informasi internal."
-FOLLOW_UP = re.compile(r"^(kalau|bagaimana dengan|lalu|dan untuk|yang tadi|itu|terus|untuk yang)\b", re.I)
+FOLLOW_UP = re.compile(
+    r"^(kalau|bagaimana dengan|lalu|dan untuk|yang tadi|itu|terus|untuk yang|masa sih|yakin|benarkah|"
+    r"apa benar|bukankah|coba (?:cek|periksa)|periksa (?:lagi|ulang))\b",
+    re.I,
+)
 GREETING = re.compile(
     r"\s*(?:sira[\s,!.:;-]+)?"
     r"(?:halo|hallo|hai|hi|hello|selamat\s+(?:pagi|siang|sore|malam)|terima\s+kasih)"

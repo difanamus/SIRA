@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import secrets
+import shutil
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -309,8 +310,30 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
     def retry_processing(document_id, request, enhanced=False):
         ctx = request.app.state.ctx
         with ctx.mutation_lock:
-            doc = ctx.db.one("SELECT pending_version FROM documents WHERE id=? AND deleted=0", (document_id,))
+            doc = ctx.db.one(
+                "SELECT pending_version,active_version FROM documents WHERE id=? AND deleted=0", (document_id,)
+            )
             version = ctx.db.one("SELECT * FROM versions WHERE id=?", (doc["pending_version"],)) if doc else None
+            if enhanced and doc and not doc["pending_version"] and doc["active_version"]:
+                if ctx.ingestion.jobs.qsize() >= 5:
+                    raise HTTPException(429, "Antrean pemrosesan penuh.")
+                active = ctx.db.one("SELECT * FROM versions WHERE id=?", (doc["active_version"],))
+                new_id = uuid.uuid4().hex
+                path = settings.data_dir / "documents" / (new_id + ".pdf")
+                shutil.copyfile(active["path"], path)
+                try:
+                    with ctx.db.connect() as conn:
+                        conn.execute(
+                            "INSERT INTO versions(id,document_id,path,sha256,size,status,ocr_mode,created) "
+                            "VALUES (?,?,?,?,?,'processing','ai',?)",
+                            (new_id, document_id, str(path), active["sha256"], active["size"], time.time()),
+                        )
+                        conn.execute("UPDATE documents SET pending_version=? WHERE id=?", (new_id, document_id))
+                except BaseException:
+                    path.unlink(missing_ok=True)
+                    raise
+                ctx.ingestion.enqueue(new_id)
+                return {"ok": True}
             if not version or version["status"] not in {"failed", "review"}:
                 raise HTTPException(409, "Tidak ada pemrosesan gagal yang dapat diulang.")
             if ctx.ingestion.jobs.qsize() >= 5:

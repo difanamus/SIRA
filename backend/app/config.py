@@ -30,6 +30,7 @@ class Settings:
     ocr_lang: str = field(default_factory=lambda: os.getenv("SIRA_OCR_LANG", "ind+eng"))
     max_pages: int = field(default_factory=lambda: int(os.getenv("SIRA_MAX_PAGES", "300")))
     vision_enabled: bool = field(default_factory=lambda: os.getenv("SIRA_VISION_ENABLED", "true").lower() == "true")
+    ocr_workers: int = field(default_factory=lambda: int(os.getenv("SIRA_OCR_WORKERS", "3")))
     max_upload: int = 100 * 1024 * 1024
     session_cache_ttl: int = 1800
 
@@ -41,6 +42,8 @@ class Settings:
                 raise ValueError("SIRA_RELAY_URL harus berupa URL HTTPS tanpa kredensial/query.")
         if not 1 <= self.max_pages <= 1000:
             raise ValueError("SIRA_MAX_PAGES harus antara 1 dan 1000.")
+        if not 1 <= self.ocr_workers <= 6:
+            raise ValueError("SIRA_OCR_WORKERS harus antara 1 dan 6.")
 
     @property
     def ai_ready(self):

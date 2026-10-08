@@ -306,7 +306,8 @@ export function DocumentReview({
               Sumber teks:{' '}
               {selected.method === 'manual'
                 ? 'Koreksi admin'
-                : selected.method === 'ocr-regions-draft'
+                : selected.method === 'ocr-regions-draft' ||
+                    selected.method === 'ocr-layout-draft-v3'
                   ? 'Draft OCR bertahap; perlu review'
                   : selected.method.includes('5.6-sol')
                     ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'

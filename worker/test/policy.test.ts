@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prepare, ANSWER_SYSTEM } from '../src/policy';
+import { prepare, ANSWER_SYSTEM, LAYOUT_SYSTEM } from '../src/policy';
 
 const payload = {
   question: 'Kalau SMA?',
@@ -71,4 +71,25 @@ test('last-resort OCR fixes Sol model, one crop and bounded reasoning/output', (
   assert.throws(() => prepare('/vision-fragment', { image, enhanced: true }));
   assert.throws(() => prepare('/vision-fragment', { image, model: 'other' }));
   assert.throws(() => prepare('/vision-fragment', { image: image + 'Y'.repeat(2000000) }));
+});
+
+test('layout OCR receives image pixels and strict cell spans, never previous transcripts', () => {
+  const image = 'data:image/jpeg;base64,YWJj';
+  for (const path of ['/vision', '/vision-fragment']) {
+    const prepared = prepare(path, { image, layout: true });
+    assert.equal(prepared.body.model, path === '/vision' ? 'gpt-4.1-mini' : 'gpt-5.6-sol');
+    const messages = prepared.body.messages as { role: string; content: unknown }[];
+    assert.deepEqual(messages[0], { role: 'system', content: LAYOUT_SYSTEM });
+    const content = messages[1].content as { type: string; image_url?: { url: string } }[];
+    assert.equal(content[1].image_url?.url, image);
+    const format = prepared.body.response_format as {
+      type: string;
+      json_schema: { strict: boolean; schema: unknown };
+    };
+    assert.equal(format.type, 'json_schema');
+    assert.equal(format.json_schema.strict, true);
+    assert.ok(JSON.stringify(format.json_schema.schema).includes('rowspan'));
+    assert.throws(() => prepare(path, { image, layout: true, previous_text: '29 Oktober 2026' }));
+    assert.throws(() => prepare(path, { image, layout: 'true' }));
+  }
 });

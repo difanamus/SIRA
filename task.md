@@ -77,7 +77,7 @@ Aturan penggunaan:
 - [x] Mengintegrasikan bantuan vision selektif dengan transkripsi setia sumber dan penandaan bagian tidak terbaca.
 - [x] Menangani halaman kritis yang belum terbaca tanpa mengaktifkan versi tidak lengkap secara diam-diam.
 - [x] Menambahkan tombol admin **Baca dengan AI**, pemeriksaan GPT-4.1 mini setelah OCR lokal, mode persisten, dan cache sesuai metode; model chat tetap GPT-4o mini.
-- [x] Menerapkan OCR lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada crop yang masih meragukan, maksimum dua crop per halaman, dengan penyimpanan hasil tiap tahap dan penghentian saat kuota/jaringan gagal.
+- [x] Menerapkan OCR lokal → GPT-4.1 mini → GPT-5.6 Sol pada bagian yang masih meragukan; AI membaca gambar asli tanpa transkripsi OCR/model sebelumnya, dengan checkpoint dan penghentian antrean AI saat layanan gagal.
 - [x] Menjaga batas crop pada sela baris dan garis penuh tabel agar sel gabungan tidak terpisah; preflight lokal 12 halaman SBP berhasil.
 - [x] Menampilkan lokasi/crop bagian bermasalah dan mewajibkan konfirmasi hanya pada halaman yang belum lolos atau diedit admin.
 - [x] Menampilkan hanya halaman wajib review yang belum dikonfirmasi secara default, berpindah otomatis setelah konfirmasi, serta menyediakan opsi **Review seluruh halaman**.
@@ -86,6 +86,12 @@ Aturan penggunaan:
 - [x] Menampilkan keterangan akurasi OCR serta rencana pratinjau/koreksi manual secara jelas di admin.
 - [x] Menyediakan review gambar dan editor teks per halaman, draft persisten, konfirmasi admin, serta aktivasi setelah embedding berhasil.
 - [x] Menyelesaikan ingestion pengumuman SBP dan memeriksa metadata halaman: 12 halaman, 25 chunk/vektor persisten, aktif setelah pengguna mengonfirmasi halaman 10 dan 12.
+
+- [x] Memisahkan producer lokal dari antrean AI dengan tiga worker agar pemindaian halaman berikutnya tidak menunggu jaringan.
+- [x] Mendeteksi tabel/kolom kompleks, mempertahankan tabel utuh, memvalidasi rowspan/colspan terhadap geometri, dan menyimpan record baris atomik.
+- [x] Menyimpan rencana lokal, respons AI, hash input gambar, serta durasi per tahap untuk resume.
+- [x] Menyediakan Baca ulang dengan AI pada dokumen aktif tanpa upload ulang; versi sebelumnya tetap tersedia sampai versi baru siap.
+- [x] Menguji tabel SBP dengan empat request berbayar terbatas; hasil Sol menempatkan tanggal kelulusan 23–26 November 2026 pada baris yang benar.
 
 ## 5. Retrieval, jawaban, dan sesi chat
 
@@ -181,3 +187,5 @@ Aturan penggunaan:
 - 8 Oktober 2026: pengguna mengubah keputusan sesi: riwayat dan konteks kini persisten di SQLite schema 5, browser menyimpan penanda sesi; hanya Percakapan baru menghapus sesi lama dan mencabut tokennya. Refresh, navigasi admin, tutup/buka browser, serta restart aplikasi berhasil memulihkan riwayat. Tes follow-up setelah restart, isolasi sesi, reset, sumber, dan respons terputus lulus. Suite backend 40 lulus/1 live dilewati, lalu 8 regresi akhir lulus setelah penguncian cache dan tes pembatalan; Ruff/build UI lulus. Browser desktop/mobile menguji pemulihan gangguan history serta reset antar-tab tanpa panggilan OpenAI. Bukti docs/testing.md dan tmp/persistent-chat-ui/.
 
 - 8 Oktober 2026: setelah laporan refresh kosong, 18 pesan pengguna dipastikan masih ada di SQLite. Ditambahkan cookie HttpOnly/SameSite Strict sebagai cadangan penanda sesi, pemasangan cookie pada respons chat dari tab lama, dan pemeriksaan sesi server pada setiap boot meskipun localStorage kosong. 10 regresi backend, build, dan browser tanpa AI lulus, termasuk storage sengaja dihapus/diblokir, migrasi sesi lama, cookie-only reopen, reset, serta isolasi browser. Pengguna mengonfirmasi Chrome/Edge pada 127.0.0.1:8000; penyebab spesifik dan hasil pada browser pengguna belum terkonfirmasi. Rincian docs/testing.md.
+
+- 8 Oktober 2026: OCR layout-v3 diterapkan dengan producer lokal independen, tiga worker gambar asli, structured table/sel gabungan, crop berdasarkan geometri sumber, checkpoint/resume, dan Baca ulang dengan AI tanpa upload ulang. Konteks “masa sih?” menggunakan pertanyaan sebelumnya. 55 backend lulus/1 live dilewati, 8 policy dan 10 runtime Worker lulus, build dan UI desktop/mobile lulus. Empat request berbayar terbatas sekitar US$0,03918; Sol membaca tanggal kelulusan SBP 23–26 November 2026 dengan benar dan validator menolak baris hilang dari mini. Pemeriksaan lokal 12 halaman sekitar 47 detik, rencana 16 area/dua tabel; durasi total dengan AI belum diuji. Dua dokumen aktif dipertahankan; SBP lama perlu Baca ulang dengan AI untuk mengganti ekstraksi lama. Detail docs/ocr-fallback.md dan docs/testing.md.

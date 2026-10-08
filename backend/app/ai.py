@@ -74,7 +74,7 @@ class Relay:
         except (KeyError, TypeError, ValueError) as exc:
             raise AIError("Format embedding layanan AI tidak sesuai.") from exc
 
-    def vision(self, image, *, enhanced=False, fragment=False):
+    def vision(self, image, *, enhanced=False, fragment=False, structured=False):
         payload = {"images": image} if isinstance(image, list) else {"image": image}
         if enhanced:
             payload["enhanced"] = True
@@ -82,6 +82,8 @@ class Relay:
             if not isinstance(image, str):
                 raise AIError("Fallback Sol hanya menerima satu potongan gambar.")
             payload = {"image": image}
+        if structured:
+            payload["layout"] = True
         result = self.post("vision-fragment" if fragment else "vision", payload)
         try:
             choice = result["choices"][0]
@@ -89,6 +91,14 @@ class Relay:
                 raise ValueError("Incomplete OCR response")
             content = choice["message"]["content"]
             parsed = json.loads(content)
+            if structured:
+                if (
+                    not isinstance(parsed, dict)
+                    or not isinstance(parsed.get("blocks"), list)
+                    or not 1 <= len(parsed["blocks"]) <= 128
+                ):
+                    raise ValueError("Invalid document layout")
+                return parsed
             if not isinstance(parsed["text"], str) or not isinstance(parsed["uncertain"], bool):
                 raise ValueError("Invalid OCR result")
             return parsed

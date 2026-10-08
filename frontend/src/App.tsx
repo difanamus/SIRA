@@ -929,16 +929,18 @@ function Admin({ health }: { health: Health | null }) {
                 sebelum penggunaan operasional.
               </p>
               <p>
-                Scan dibaca dengan OCR lokal, lalu bagian yang meragukan diperiksa GPT-4.1 mini.
-                Jika masih berbeda, GPT-5.6 Sol membantu hanya potongan terkait, maksimal dua
-                potongan per halaman. Bantuan AI berbayar. Jika masih belum jelas, tersedia review
-                bagian yang ditandai. Model chatbot tetap GPT-4o mini.
+                Pemeriksaan lokal berjalan tanpa menunggu AI. Halaman yang meragukan dan tabel
+                dibaca langsung dari gambar asli oleh GPT-4.1 mini. Hubungan baris, kolom, dan sel
+                gabungan ikut diperiksa. GPT-5.6 Sol membaca bagian yang belum jelas; hasil yang
+                tetap meragukan masuk review admin. Bantuan AI berbayar. Model chatbot tetap GPT-4o
+                mini.
               </p>
               <div className="development-note">
                 <span>REVIEW OLEH ADMIN</span>
                 <p>
                   Gunakan “Review dan koreksi” pada dokumen gagal. Gambar asli dan teks ditampilkan
-                  per halaman; setiap halaman perlu dikonfirmasi sebelum pembuatan indeks.
+                  per halaman. Hanya halaman yang ditandai perlu review yang wajib dikonfirmasi;
+                  tersedia juga pilihan meninjau seluruh dokumen.
                 </p>
                 <small>Penyiapan review lokal tidak menggunakan OCR AI berbayar.</small>
               </div>
@@ -1075,7 +1077,9 @@ function Admin({ health }: { health: Health | null }) {
                               }}
                             />
                           </label>
-                          {(doc.status === 'failed' || doc.status === 'review') && (
+                          {(doc.status === 'failed' ||
+                            doc.status === 'review' ||
+                            doc.status === 'ready') && (
                             <>
                               {doc.status === 'failed' && (
                                 <button
@@ -1108,7 +1112,7 @@ function Admin({ health }: { health: Health | null }) {
                                   )
                                 }
                               >
-                                Baca dengan AI
+                                {doc.status === 'ready' ? 'Baca ulang dengan AI' : 'Baca dengan AI'}
                               </button>
                             </>
                           )}
@@ -1124,7 +1128,7 @@ function Admin({ health }: { health: Health | null }) {
                                     method: 'POST',
                                   });
                                   setReviewing(doc);
-                                }, 'Review dokumen dibuka. Cocokkan dan konfirmasi setiap halaman sebelum membuat indeks.')
+                                }, 'Review dokumen dibuka. Cocokkan dan konfirmasi halaman yang ditandai sebelum membuat indeks.')
                               }
                             >
                               Review dan koreksi

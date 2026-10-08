@@ -149,7 +149,7 @@ Urutan pemrosesan:
 3. Ekstrak teks per halaman. PDF campuran diputuskan per halaman, bukan berdasarkan seluruh file.
 4. Untuk halaman scan atau ekstraksi yang tidak memadai, render gambar dengan resolusi yang sesuai, lakukan preprocessing yang diperlukan, lalu jalankan OCR lokal.
 5. Tentukan bagian yang membutuhkan bantuan AI menggunakan gabungan sinyal: teks kosong/terlalu sedikit, karakter rusak, confidence OCR, tata letak sulit, tabel, dan ketidaksesuaian hasil ekstraksi.
-6. Kirim potongan meragukan ke GPT-4.1 mini melalui Worker. Pembacaan kedua mini dilakukan jika perlu; GPT-5.6 Sol menjadi opsi terakhir hanya untuk potongan yang masih berbeda/ragu, maksimal dua potongan per halaman. Batas crop menjaga baris dan sel tabel; detail ada pada `docs/ocr-fallback.md`. Instruksikan transkripsi setia sumber tanpa mengisi isi yang hilang.
+6. Producer lokal memeriksa seluruh dokumen tanpa menunggu AI, menandai tabel/kolom kompleks/teks meragukan, dan menyimpan rencana. Tiga worker AI membaca gambar asli secara mandiri melalui GPT-4.1 mini; tanpa transkripsi OCR sebelumnya. Tabel utuh menggunakan struktur sel/span, dengan validasi geometri dan record baris atomik saat indexing. GPT-5.6 Sol membaca hanya area yang masih bermasalah. Hasil tetap ragu masuk review selektif, dengan opsi review keseluruhan; hasil persisten digunakan saat resume. Detail `docs/ocr-fallback.md`.
 7. Jika hasil tetap tidak terbaca atau perbedaan kritis belum terselesaikan, tampilkan peringatan/kegagalan yang jujur. Jangan mengaktifkan versi sebagai knowledge base siap jika halaman penting belum berhasil diproses.
 8. Simpan teks, asal halaman, metode ekstraksi, dan peringatan. Hilangkan header/footer berulang secara hati-hati tanpa membuang makna pasal atau persyaratan.
 9. Pecah teks berdasarkan struktur bagian/pasal/persyaratan, lalu batas token. Pertahankan hubungan butir, negasi, angka, dan header tabel.
@@ -332,3 +332,8 @@ Tidak ada keputusan produk yang menghalangi penyusunan rencana atau tahap fondas
 - OWASP prompt injection: https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html
 
 Referensi ini merupakan pedoman teknis; batas layanan dan kompatibilitas diverifikasi kembali saat implementasi.
+
+
+## Pembaruan implementasi OCR layout-v3 — 8 Oktober 2026
+
+Antrean lokal/AI independen, gambar asli, struktur tabel/sel gabungan, resume per area, review selektif, dan pembacaan ulang dokumen aktif tanpa upload ulang sudah diimplementasikan. Pertanyaan meragukan jawaban seperti “masa sih?” mengambil ulang sumber dengan konteks pertanyaan sebelumnya. Evaluasi berbayar dibatasi empat request pada halaman/tabel 12 SBP; seluruh dokumen belum diproses ulang berbayar. Angka uji dan keterbatasan berada pada `docs/testing.md`.

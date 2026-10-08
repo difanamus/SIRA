@@ -198,7 +198,7 @@ class OCRReviewRequired(AIError):
 
 
 class RegionalOCR:
-    """Persist each paid stage. Sol receives only a disputed band, never a page."""
+    """Legacy v2 reader for older diagnostic scripts; document jobs use DocumentOCR."""
 
     def __init__(self, ingestion, force_ai=False):
         self.owner = ingestion
@@ -357,7 +357,11 @@ def chunk_page(text, version_id, page, target=650, overlap=100):
     pieces = []
     for paragraph in paragraphs:
         tokens = ENCODING.encode(paragraph)
-        if len(tokens) > target:
+        if paragraph.startswith("[TABEL "):
+            # A normalized row is an atomic evidence unit, with its headers and
+            # explicit merged-cell values. Never separate an activity/date pair.
+            pieces.append(paragraph)
+        elif len(tokens) > target:
             pieces.extend(ENCODING.decode(tokens[i : i + target]) for i in range(0, len(tokens), target - overlap))
         elif paragraph.strip():
             pieces.append(paragraph)
@@ -447,11 +451,16 @@ class Ingestion:
                     conn.execute("DELETE FROM pages WHERE version_id=?", (row["id"],))
                     conn.execute("DELETE FROM review_pages WHERE version_id=?", (row["id"],))
                     conn.execute("DELETE FROM ocr_regions WHERE version_id=?", (row["id"],))
+                    conn.execute("DELETE FROM ocr_page_jobs WHERE version_id=?", (row["id"],))
                     conn.execute("DELETE FROM versions WHERE id=?", (row["id"],))
             except (OSError, RuntimeError):
                 log.warning("cleanup_pending")
 
     def extract_local(self, image):
+        text, confidence, _ = self.extract_local_evidence(image)
+        return text, confidence
+
+    def extract_local_evidence(self, image):
         try:
             data = pytesseract.image_to_data(
                 image, lang=self.settings.ocr_lang, config="--psm 3", output_type=pytesseract.Output.DICT, timeout=60
@@ -460,7 +469,7 @@ class Ingestion:
             raise AIError(
                 "OCR lokal belum siap atau melewati batas waktu. Pasang Tesseract beserta bahasa ind dan eng, lalu proses ulang."
             ) from exc
-        lines, confidences = {}, []
+        lines, confidences, words = {}, [], []
         for i, word in enumerate(data["text"]):
             if not word.strip():
                 continue
@@ -468,9 +477,21 @@ class Ingestion:
             lines.setdefault(key, []).append(word)
             if float(data["conf"][i]) >= 0:
                 confidences.append(float(data["conf"][i]))
+            words.append(
+                {
+                    "text": word,
+                    "confidence": float(data["conf"][i]),
+                    "bbox": [
+                        data["left"][i] / image.width,
+                        data["top"][i] / image.height,
+                        (data["left"][i] + data["width"][i]) / image.width,
+                        (data["top"][i] + data["height"][i]) / image.height,
+                    ],
+                }
+            )
         text = "\n".join(" ".join(words) for words in lines.values())
         confidence = sum(confidences) / max(1, len(confidences))
-        return text, confidence
+        return text, confidence, words
 
     def extract_scan(self, image):
         return RegionalOCR(self).extract(image)
@@ -500,14 +521,20 @@ class Ingestion:
                     accepted
                     and accepted["method"].startswith("ocr")
                     and not (
-                        accepted["method"].endswith("regions-v2") or accepted["method"].endswith("ai-4.1-mini-crops-v1")
+                        accepted["method"].endswith("regions-v2")
+                        or accepted["method"].endswith("ai-4.1-mini-crops-v1")
+                        or accepted["method"].endswith("layout-v3")
                     )
                 ):
                     accepted = None
                 regions = self.db.rows(
                     "SELECT * FROM ocr_regions WHERE version_id=? AND page=? ORDER BY number", (version_id, number)
                 )
-                if not accepted and regions:
+                v3_job = self.db.one(
+                    "SELECT plan FROM ocr_page_jobs WHERE version_id=? AND page=?", (version_id, number)
+                )
+                is_v3 = bool(v3_job)
+                if not accepted and regions and not is_v3:
                     # A budget/network failure may have stopped mid-page. Complete only
                     # the missing draft regions locally, without another API request.
                     image = render_page(version["path"], number)
@@ -554,7 +581,44 @@ class Ingestion:
                     stage=f"Menyiapkan review: halaman {number}/{len(pdf.pages)}",
                     progress=int(number / len(pdf.pages) * 95),
                 )
-                if not accepted and regions:
+                if not accepted and is_v3:
+                    from .ocr_layout import block_text
+
+                    plan = json.loads(v3_job["plan"])
+                    parts = {r["number"]: r for r in regions if r["number"] > 0}
+                    drafts = []
+                    for part, zone in enumerate(plan.get("zones", []), 1):
+                        saved = parts.get(part)
+                        draft = saved["text"] if saved else ""
+                        if saved and not draft:
+                            state = json.loads(saved["state"])
+                            draft = "\n\n".join(
+                                block_text(block, part) for block in state.get("mini", {}).get("blocks", [])
+                            )
+                        drafts.append(draft or zone["text"])
+                        if not saved:
+                            self.db.execute(
+                                "INSERT OR IGNORE INTO ocr_regions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                                (
+                                    version_id,
+                                    number,
+                                    part,
+                                    zone["bbox"][1],
+                                    zone["bbox"][3],
+                                    json.dumps({"pipeline": "layout-v3", "input_layout": "source-zones-v1"}),
+                                    zone["text"],
+                                    "ocr-layout-draft-v3",
+                                    "Pembacaan gambar belum selesai; cocokkan dengan sumber.",
+                                    int(zone["ai"]),
+                                ),
+                            )
+                    text = "\n\n".join(drafts) or plan["text"]
+                    method = "ocr-layout-draft-v3"
+                    warning = (
+                        "\n".join(r["warning"] for r in regions if r["required"])
+                        or "Pembacaan gambar belum lengkap; cocokkan draft dengan sumber."
+                    )
+                elif not accepted and regions:
                     text = "\n\n".join(row["text"] for row in regions)
                     method = "ocr-regions-draft"
                     warning = (
@@ -605,73 +669,20 @@ class Ingestion:
             conn.execute("DELETE FROM chunks WHERE version_id=?", (version_id,))
         # The uploaded version is immutable. Resume from accepted page transcripts
         # after a network/embedding failure instead of charging for OCR again.
-        warnings, pending_chunks, text_size, needs_review = [], [], 0, False
-        try:
-            with pdfplumber.open(version["path"]) as pdf:
-                if not 1 <= len(pdf.pages) <= self.settings.max_pages:
-                    raise AIError(f"PDF harus berisi 1-{self.settings.max_pages} halaman.")
-                self.update(version_id, page_count=len(pdf.pages), stage="Ekstraksi halaman", progress=2)
-                for number, page in enumerate(pdf.pages, 1):
-                    self.assert_live(version_id)
-                    if page.width * page.height > 10_000_000:
-                        raise AIError("Ukuran halaman terlalu besar untuk diproses dengan aman.")
-                    cached = self.db.one("SELECT * FROM pages WHERE version_id=? AND number=?", (version_id, number))
-                    if cached and cached["method"].startswith("ocr"):
-                        if not (
-                            cached["method"].endswith("regions-v2") or cached["method"].endswith("ai-4.1-mini-crops-v1")
-                        ):
-                            cached = None
-                        elif version["ocr_mode"] == "ai" and cached["method"] == "ocr-local-regions-v2":
-                            cached = None
-                    text = cached["text"] if cached else (page.extract_text(layout=False) or "")
-                    method, warning = (cached["method"], cached["warning"]) if cached else ("text", "")
-                    if not cached and not readable(text):
-                        image = render_page(version["path"], number)
-                        # Truly blank pages are recorded, never guessed.
-                        if ImageOps.grayscale(image).getextrema()[0] > 245:
-                            text, method = "", "blank"
-                        else:
-                            try:
-                                self.scan_context = (version_id, number)
-                                if version["ocr_mode"] == "ai":
-                                    self.update(version_id, stage=f"Baca dengan AI: halaman {number}/{len(pdf.pages)}")
-                                    text, method, warning = self.extract_with_ai(image)
-                                else:
-                                    text, method, warning = self.extract_scan(image)
-                            except OCRReviewRequired as exc:
-                                needs_review = True
-                                warnings.append(f"Halaman {number}: {exc}")
-                                self.db.execute(
-                                    "DELETE FROM pages WHERE version_id=? AND number=?", (version_id, number)
-                                )
-                                continue
-                            except AIError as exc:
-                                raise AIError(f"Halaman {number}: {exc}") from exc
-                            finally:
-                                self.scan_context = None
-                    if warning:
-                        warnings.append(f"Halaman {number}: {warning}")
-                    self.db.execute(
-                        "INSERT OR REPLACE INTO pages VALUES (?,?,?,?,?)",
-                        (version_id, number, text, method, warning),
-                    )
-                    page_chunks = chunk_page(text, version_id, number)
-                    pending_chunks.extend(page_chunks)
-                    text_size += sum(len(chunk["text"]) for chunk in page_chunks)
-                    if text_size > 5_000_000:
-                        raise AIError("Teks PDF terlalu besar. Pisahkan dokumen menjadi beberapa PDF.")
-                    self.update(
-                        version_id,
-                        stage=f"Halaman {number}/{len(pdf.pages)}",
-                        progress=min(70, int(number / len(pdf.pages) * 70)),
-                        warning="\n".join(warnings),
-                    )
-        except AIError:
-            raise
-        except Exception as exc:
-            raise AIError(
-                "PDF tidak dapat diproses. Pastikan file tidak rusak/terkunci dan instalasi OCR tersedia."
-            ) from exc
+        from .ocr_pipeline import DocumentOCR
+
+        needs_review = DocumentOCR(self, version).extract()
+        warnings, pending_chunks, text_size = [], [], 0
+        for saved in self.db.rows("SELECT * FROM pages WHERE version_id=? ORDER BY number", (version_id,)):
+            number = saved["number"]
+            if saved["warning"]:
+                warnings.append(f"Halaman {number}: {saved['warning']}")
+            page_chunks = chunk_page(saved["text"], version_id, number)
+            pending_chunks.extend(page_chunks)
+            text_size += sum(len(chunk["text"]) for chunk in page_chunks)
+            if text_size > 5_000_000:
+                raise AIError("Teks PDF terlalu besar. Pisahkan dokumen menjadi beberapa PDF.")
+        self.update(version_id, warning="\n".join(warnings))
         if version["ocr_mode"] != "manual" and self.db.one(
             "SELECT 1 FROM review_pages WHERE version_id=? AND revision>0", (version_id,)
         ):
