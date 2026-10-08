@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import logging
 import secrets
 import shutil
@@ -22,6 +23,7 @@ from .chat import Chat
 from .config import ROOT, Settings
 from .db import Database
 from .ingestion import Ingestion, render_page, save_upload
+from .review_hints import review_hints
 from .security import Limiter, check_origin, digest, hasher, require_admin, verify_password
 from .vectors import VectorStore
 
@@ -383,12 +385,25 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
             (version["id"],),
         )
         regions = ctx.db.rows(
-            "SELECT page,number,top,bottom,method,warning FROM ocr_regions WHERE version_id=? AND required=1 ORDER BY page,number",
+            "SELECT page,number,top,bottom,method,warning,state FROM ocr_regions WHERE version_id=? AND required=1 ORDER BY page,number",
             (version["id"],),
         )
         for page in pages:
+            parts = [part for part in regions if part["page"] == page["number"]]
+            job = (
+                ctx.db.one(
+                    "SELECT plan FROM ocr_page_jobs WHERE version_id=? AND page=?", (version["id"], page["number"])
+                )
+                if parts
+                else None
+            )
+            page["hints"] = (
+                review_hints(page, parts, json.loads(job["plan"]) if job else None)
+                if page["required"] and not page["confirmed"]
+                else []
+            )
             page["regions"] = (
-                [part for part in regions if part["page"] == page["number"]]
+                [{key: value for key, value in part.items() if key != "state"} for part in parts]
                 if page["required"] and not page["confirmed"]
                 else []
             )
@@ -406,13 +421,50 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         tags=["Review"],
         dependencies=[Depends(require_admin)],
     )
-    def review_image(document_id: str, number: int, version_id: str, request: Request, region: int | None = None):
+    def review_image(
+        document_id: str,
+        number: int,
+        version_id: str,
+        request: Request,
+        region: int | None = None,
+        hint: str | None = None,
+    ):
         ctx = request.app.state.ctx
         version = pending_review(ctx, document_id, version_id)
         if not 1 <= number <= version["page_count"]:
             raise HTTPException(404, "Halaman tidak ditemukan.")
         image = render_page(version["path"], number, maximum=2400)
-        if region is not None:
+        if hint is not None:
+            page = ctx.db.one("SELECT * FROM review_pages WHERE version_id=? AND number=?", (version_id, number))
+            regions = ctx.db.rows(
+                "SELECT * FROM ocr_regions WHERE version_id=? AND page=? AND required=1 ORDER BY number",
+                (version_id, number),
+            )
+            job = ctx.db.one("SELECT plan FROM ocr_page_jobs WHERE version_id=? AND page=?", (version_id, number))
+            finding = (
+                next(
+                    (
+                        item
+                        for item in review_hints(page, regions, json.loads(job["plan"]) if job else None)
+                        if item["id"] == hint
+                    ),
+                    None,
+                )
+                if page
+                else None
+            )
+            if not finding:
+                raise HTTPException(404, "Petunjuk review tidak ditemukan.")
+            x0, y0, x1, y1 = finding["bbox"]
+            image = image.crop(
+                (
+                    round(max(0, x0 - 0.025) * image.width),
+                    round(max(0, y0 - 0.025) * image.height),
+                    round(min(1, x1 + 0.025) * image.width),
+                    round(min(1, y1 + 0.025) * image.height),
+                )
+            )
+        elif region is not None:
             bounds = ctx.db.one(
                 "SELECT top,bottom FROM ocr_regions WHERE version_id=? AND page=? AND number=?",
                 (version_id, number, region),

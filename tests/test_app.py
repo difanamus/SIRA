@@ -494,6 +494,8 @@ def test_automatic_review_requires_only_unresolved_page_and_preview_crop(harness
     assert [page["required"] for page in review["pages"]] == [0, 1, 0]
     assert len(review["pages"][1]["regions"]) == 1
     assert "5.6-sol" in review["pages"][1]["regions"][0]["method"]
+    finding = review["pages"][1]["hints"][0]
+    assert finding["quote"] == TEXT and finding["locatable"] and finding["text_range"]
     version = {"version_id": review["version_id"]}
     assert client.post(base + "/activate", json=version).status_code == 409
     full = client.get(base + "/pages/2/image", params=version)
@@ -501,6 +503,10 @@ def test_automatic_review_requires_only_unresolved_page_and_preview_crop(harness
     assert crop.status_code == 200
     assert Image.open(io.BytesIO(crop.content)).height < Image.open(io.BytesIO(full.content)).height / 4
     assert client.get(base + "/pages/2/image", params={**version, "region": 99}).status_code == 404
+    pointed = client.get(base + "/pages/2/image", params={**version, "hint": finding["id"]})
+    assert pointed.status_code == 200
+    assert Image.open(io.BytesIO(pointed.content)).height < Image.open(io.BytesIO(full.content)).height / 2
+    assert client.get(base + "/pages/2/image", params={**version, "hint": "unknown"}).status_code == 404
     assert (
         client.put(base + "/pages/2", json={**version, "revision": 0, "text": TEXT, "confirmed": True}).status_code
         == 200

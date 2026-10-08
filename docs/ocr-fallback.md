@@ -42,3 +42,12 @@ Referensi: [Tesseract dan tabel](https://tesseract-ocr.github.io/tessdoc/Improve
 Laporan 12/12 halaman wajib review mengungkap false positive pada validator awal: kata umum berulang memperlebar lokasi paragraf, lalu angka seluruh halaman dibandingkan dengan satu block. Angka/folio yang dilewatkan model serta rows nonzero pada block teks tanpa sel ikut memicu review. Kini perbandingan memakai area yang sama dan frasa berurutan; metadata jumlah baris teks tidak diperlakukan sebagai tabel. Struktur tabel tetap diperiksa ketat. Hasil Sol tersimpan, termasuk keraguannya, tetap digunakan saat evaluasi ulang dan tidak ditumpuk dengan salinan mini.
 
 Pemulihan SBP dari respons asli tersimpan menghasilkan 10 halaman lolos dan dua halaman wajib review (11–12), pada nomor pengumuman di header yang hasil Sol-nya masih uncertain. Kedua tabel lolos. Tidak ada panggilan AI tambahan, konfirmasi manusia otomatis, atau aktivasi versi baru. Backup lokal dibuat; koreksi admin yang sudah memiliki revision tetap dipertahankan. Ambang confidence tetap heuristik, bukan bukti kebenaran.
+
+
+## Petunjuk review per bagian
+
+Review admin menampilkan alasan, kutipan teks yang dinyatakan ragu oleh pembacaan terakhir, dan area perkiraan pada gambar. Tombol Lihat bagian ini dan tandai teks membuka crop sumber serta menyeleksi kutipan pada editor. Pencarian teks toleran whitespace, tetapi tidak menyeleksi kutipan ambigu atau menimpa edit belum tersimpan. Sel tabel yang ragu menyebut baris/kolom; jika grid lokal tersedia, crop mempertahankan rentang sel gabungan. Preview/crop tetap hanya dapat diakses admin.
+
+Jika keluaran AI gagal format/koordinat, petunjuk menyatakan bahwa belum ada lokasi kata tertentu yang diketahui. Tidak ada penanda kesalahan faktual palsu. Untuk pemrosesan berikutnya, transkripsi teks yang sudah diterima tetapi gagal validasi koordinat dipertahankan sebagai draft belum terverifikasi, bukan langsung diaktifkan. Petunjuk dihasilkan dari hasil tersimpan, tanpa request AI tambahan.
+
+PDF campuran diputuskan per halaman. Uji native+scan membuktikan halaman teks diekstrak langsung, sementara halaman gambar menjalankan OCR. File SBP asli dan upload terbaru pada saat pemeriksaan ini identik; pdfplumber dan PDFium sama-sama menemukan nol karakter native pada seluruh 12 halaman. Kemampuan menyalin teks di suatu PDF reader dapat berasal dari OCR reader atau versi file lain; hal tersebut tidak membuktikan adanya lapisan teks pada file yang tersimpan di SIRA.

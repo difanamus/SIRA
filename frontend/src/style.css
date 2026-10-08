@@ -1449,10 +1449,49 @@ textarea::placeholder {
   width: 100%;
   height: auto;
 }
-.review-image img.zoomed {
+.review-image-canvas {
+  position: relative;
+  width: 100%;
+}
+.review-image-canvas.zoomed {
   width: 160%;
   min-width: 1000px;
   max-width: none;
+}
+.review-source-mark {
+  position: absolute;
+  border: 2px solid #b8751f;
+  background: #e6ad3026;
+  pointer-events: none;
+}
+.review-findings {
+  margin: 0 24px 20px;
+  padding: 16px;
+  border: 1px solid #e6d3af;
+  border-radius: 8px;
+  background: #fcfaf5;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.review-findings h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.review-finding {
+  margin-top: 12px;
+  padding: 12px;
+  border-left: 3px solid #d4c8b3;
+  background: white;
+  overflow-wrap: anywhere;
+}
+.review-finding.current {
+  border-left-color: #b8751f;
+}
+.review-finding blockquote {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  background: #f5f6f7;
+  white-space: pre-wrap;
 }
 .review-image.fragment {
   height: auto;

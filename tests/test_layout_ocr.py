@@ -376,3 +376,52 @@ def test_revalidation_reuses_paid_results_and_preserves_uncertain_sol(tmp_path, 
     assert len(calls) == 2
     assert instance.db.one("SELECT required FROM review_pages")["required"] == 1
     assert instance.db.one("SELECT text FROM review_pages")["text"].count(TEXT) == 1
+
+
+def test_bad_ai_coordinates_preserve_unverified_paid_draft_for_manual_review(tmp_path, monkeypatch):
+    class AI:
+        def vision(self, image, **kwargs):
+            return {"blocks": [text_block(TEXT, bounds=[0.9, 0.1, 0.2, 0.5])]}
+
+    instance, version = owner(tmp_path, monkeypatch, AI())
+    assert DocumentOCR(instance, version).extract()
+    instance.prepare_review("v")
+    page = instance.db.one("SELECT * FROM review_pages")
+    assert page["required"] and TEXT in page["text"]
+    state = json.loads(instance.db.one("SELECT state FROM ocr_regions")["state"])
+    assert state["mini"]["draft_text"] == TEXT and state["mini"]["format_error"]
+
+
+def test_mixed_pdf_routes_native_and_image_pages_separately(tmp_path, monkeypatch):
+    import io
+
+    import pdfplumber
+    import pypdfium2 as pdfium
+
+    original_extract = pdfplumber.page.Page.extract_text
+
+    class AI:
+        def vision(self, *args, **kwargs):
+            raise AssertionError("Clear native text and clean local OCR do not need AI")
+
+    calls = []
+
+    def local(image):
+        calls.append(1)
+        return TEXT, 99, [{"text": TEXT, "confidence": 99, "bbox": [0, 0, 1, 1]}]
+
+    instance, version = owner(tmp_path, monkeypatch, AI(), pages=2, local=local)
+    monkeypatch.setattr(pdfplumber.page.Page, "extract_text", original_extract)
+    scan = Image.new("RGB", (900, 1200), "white")
+    ImageDraw.Draw(scan).text((80, 120), TEXT, fill="black")
+    image_pdf = io.BytesIO()
+    scan.save(image_pdf, format="PDF")
+    with pdfium.PdfDocument(pdf_bytes(TEXT)) as pdf, pdfium.PdfDocument(image_pdf.getvalue()) as scanned:
+        pdf.import_pages(scanned)
+        pdf.save(version["path"])
+    assert not DocumentOCR(instance, version).extract()
+    assert len(calls) == 1
+    assert [p["method"] for p in instance.db.rows("SELECT method FROM pages ORDER BY number")] == [
+        "text-layout-v3",
+        "ocr-local-layout-v3",
+    ]

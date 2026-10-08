@@ -594,7 +594,7 @@ class Ingestion:
                             state = json.loads(saved["state"])
                             draft = "\n\n".join(
                                 block_text(block, part) for block in state.get("mini", {}).get("blocks", [])
-                            )
+                            ) or state.get("mini", {}).get("draft_text", "")
                         drafts.append(draft or zone["text"])
                         if not saved:
                             self.db.execute(

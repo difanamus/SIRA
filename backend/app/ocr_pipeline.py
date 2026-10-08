@@ -351,12 +351,21 @@ class DocumentOCR:
             # another model's output. Hash records which exact image was sent.
             payload = image_payload(image, (2400, 3000) if not sol else (2400, 2400))
             before = time.monotonic()
+            result = None
             try:
                 result = self.owner.relay.vision(payload, enhanced=True, fragment=sol, structured=True)
                 valid_blocks(result)
                 state[key] = result
             except OCRFormatError as exc:
                 state[key] = {"blocks": [], "format_error": str(exc)}
+                # A bad position must not discard the paid transcription draft.
+                # It stays unverified and can only be used in manual review.
+                if isinstance(result, dict) and isinstance(result.get("blocks"), list):
+                    state[key]["draft_text"] = "\n\n".join(
+                        block.get("text", "")
+                        for block in result["blocks"][:128]
+                        if isinstance(block, dict) and isinstance(block.get("text"), str)
+                    )[:100_000]
             state[key + "_input_sha256"] = hashlib.sha256(payload.encode()).hexdigest()
             state[key + "_ms"] = round((time.monotonic() - before) * 1000)
             state[key + "_bbox"] = bounds
@@ -464,7 +473,12 @@ class DocumentOCR:
                     seen = set(re.findall(r"\w{4,}", extracted.casefold()))
                     if len(local_terms - seen) >= max(8, len(local_terms) * 0.35):
                         problems = ["Ada teks sumber yang belum tercakup dalam pembacaan gambar."] * max(1, len(blocks))
-                    text = "\n\n".join(block_text(b, part) for b in blocks) or zone_text or plan["text"]
+                    text = (
+                        "\n\n".join(block_text(b, part) for b in blocks)
+                        or result.get("draft_text")
+                        or zone_text
+                        or plan["text"]
+                    )
                     problem = "; ".join(dict.fromkeys(p for p in problems if p))
                     if problem or "sol" in state:
                         # Only disputed blocks are sent to Sol. A whole table is
