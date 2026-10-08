@@ -6,7 +6,7 @@ Tanggal: 8 Oktober 2026. Lingkungan: Windows pengembang, Python 3.12.14, Node.js
 
 | Pemeriksaan | Hasil |
 | --- | --- |
-| `pytest -q` | 26 lulus, 1 tes live dilewati secara default; 1 warning deprecation TestClient/httpx dari dependency |
+| `pytest -q` | 27 lulus, 1 tes live dilewati secara default; 1 warning deprecation TestClient/httpx dari dependency |
 | Ruff check backend/tests/scripts | Lulus |
 | TypeScript dan build frontend | Lulus, Vite 7.3.7 |
 | Policy test Worker | 5 lulus |
@@ -73,3 +73,12 @@ Model GPT-4o mini sempat mengubah semester II menjadi I dan melewatkan teks pada
 - Pemrosesan dokumen lengkap menerima halaman 1–4 dan menyimpan hasil dengan metode `ocr+ai-4.1-mini-crops-v1`. Sampel nomor rujukan, MDDP 0/5/4/3 tahun, materai 10.000, periode semester, nilai Litcatpers dan pendidikan dicocokkan dengan gambar. Pemeriksaan ini belum membuktikan akurasi umum.
 - Halaman 5 terhenti karena kuota total relay 2 juta unit reservasi tidak lagi cukup untuk satu request vision (60 ribu unit). Ini bukan kegagalan konsistensi teks. Resume berikutnya menggunakan cache empat halaman, kemudian mengembalikan kode `relay_budget` pada halaman 5. Kode tersebut dibedakan dari `relay_rate` dan `upstream_rate`; tidak menyarankan menunggu untuk batas total.
 - Permintaan persetujuan kenaikan kuota menjadi 4 juta unit sudah diajukan. Belum dinaikkan sebelum ada jawaban. Scan belum aktif; halaman 5–12 serta jawaban SBP masih perlu diuji. Unit reservasi bukan token tagihan atau batas biaya dolar.
+
+## Review dan koreksi yang dapat digunakan
+
+- Review per halaman kini tersedia, menggantikan keterangan rencana pengembangan. Preview JPEG berasal dari PDF yang tersimpan dan membutuhkan sesi admin; tidak ada route preview publik atau unduh PDF untuk chat.
+- Tes integrasi memeriksa penyiapan draft dari halaman AI yang tersedia dan OCR lokal sisanya, tanpa pemanggilan vision; simpan/konfirmasi, halaman kosong eksplisit, konflik revisi/tab lama, penolakan versi lama, persistensi review, serta penolakan aktivasi sebelum semua halaman dikonfirmasi.
+- Kegagalan embedding hasil review mempertahankan versi aktif sebelumnya. Retry menggunakan teks yang dikonfirmasi, tanpa OCR/vision ulang. Render PDFium memakai lock bersama untuk ingestion dan preview.
+- Browser nyata pada dokumen SBP berhasil menyiapkan seluruh 12 draft: halaman 1–4 dari hasil AI yang tersimpan, halaman 5–12 dari OCR lokal. Tidak ada pemanggilan API vision untuk tahap ini. Dokumen berstatus **Menunggu review**, belum aktif, dengan 0/12 halaman dikonfirmasi; tidak ada konfirmasi manusia yang dipalsukan.
+- UI diuji pada desktop 1440×1100 dan mobile 390×844: preview muncul, perubahan belum disimpan bertahan ketika polling, navigasi ditahan sampai simpan/batal, draft halaman 1 yang sama disimpan tanpa konfirmasi dan bertahan setelah refresh, tombol indeks tetap nonaktif. Tidak ada error JavaScript atau overflow horizontal.
+- Estimasi biaya melanjutkan OCR AI dan asumsi perhitungannya dicatat di [ocr-cost.md](ocr-cost.md). Kuota relay belum dinaikkan.

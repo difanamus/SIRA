@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import secrets
 import time
@@ -19,7 +20,7 @@ from .ai import AIError, Relay
 from .chat import Chat
 from .config import ROOT, Settings
 from .db import Database
-from .ingestion import Ingestion, save_upload
+from .ingestion import Ingestion, render_page, save_upload
 from .security import Limiter, check_origin, digest, hasher, require_admin, verify_password
 from .vectors import VectorStore
 
@@ -42,6 +43,17 @@ class Title(StrictModel):
 class Question(StrictModel):
     session_id: str = Field(min_length=20, max_length=100)
     question: str = Field(min_length=1, max_length=3000)
+
+
+class ReviewVersion(StrictModel):
+    version_id: str = Field(min_length=32, max_length=32)
+
+
+class ReviewEdit(ReviewVersion):
+    revision: int = Field(ge=0)
+    text: str = Field(max_length=100_000)
+    confirmed: bool
+    blank: bool = False
 
 
 class BodyTooLarge(HTTPException):
@@ -291,7 +303,7 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         with ctx.mutation_lock:
             doc = ctx.db.one("SELECT pending_version FROM documents WHERE id=? AND deleted=0", (document_id,))
             version = ctx.db.one("SELECT * FROM versions WHERE id=?", (doc["pending_version"],)) if doc else None
-            if not version or version["status"] != "failed":
+            if not version or version["status"] not in {"failed", "review"}:
                 raise HTTPException(409, "Tidak ada pemrosesan gagal yang dapat diulang.")
             if ctx.ingestion.jobs.qsize() >= 5:
                 raise HTTPException(429, "Antrean pemrosesan penuh.")
@@ -304,6 +316,128 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
                 warning="",
                 ocr_mode="ai" if enhanced else version["ocr_mode"],
             )
+            ctx.ingestion.enqueue(version["id"])
+        return {"ok": True}
+
+    def pending_review(ctx, document_id, version_id=None):
+        doc = ctx.db.one("SELECT pending_version FROM documents WHERE id=? AND deleted=0", (document_id,))
+        version = ctx.db.one("SELECT * FROM versions WHERE id=?", (doc["pending_version"],)) if doc else None
+        if not version or (version_id and version["id"] != version_id):
+            raise HTTPException(409, "Versi review sudah berubah atau tidak tersedia. Muat ulang daftar dokumen.")
+        return version
+
+    @app.post("/api/admin/documents/{document_id}/review", tags=["Review"], dependencies=[Depends(require_admin)])
+    def prepare_document_review(document_id: str, request: Request):
+        ctx = request.app.state.ctx
+        with ctx.mutation_lock:
+            version = pending_review(ctx, document_id)
+            if version["status"] == "review" or (version["status"] == "processing" and version["ocr_mode"] == "review"):
+                return {"ok": True, "version_id": version["id"]}
+            if version["status"] != "failed":
+                raise HTTPException(409, "Tunggu pemrosesan dokumen selesai sebelum review.")
+            if ctx.ingestion.jobs.qsize() >= 5:
+                raise HTTPException(429, "Antrean pemrosesan penuh.")
+            ctx.ingestion.update(
+                version["id"], status="processing", ocr_mode="review", stage="Menyiapkan review", progress=0, error=""
+            )
+            ctx.ingestion.enqueue(version["id"])
+        return {"ok": True, "version_id": version["id"]}
+
+    @app.get("/api/admin/documents/{document_id}/review", tags=["Review"], dependencies=[Depends(require_admin)])
+    def get_document_review(document_id: str, request: Request):
+        ctx = request.app.state.ctx
+        version = pending_review(ctx, document_id)
+        pages = ctx.db.rows(
+            "SELECT number,text,method,warning,confirmed,revision FROM review_pages WHERE version_id=? ORDER BY number",
+            (version["id"],),
+        )
+        return {
+            "version_id": version["id"],
+            "page_count": version["page_count"],
+            "status": version["status"],
+            "stage": version["stage"],
+            "error": version["error"],
+            "pages": pages,
+        }
+
+    @app.get(
+        "/api/admin/documents/{document_id}/review/pages/{number}/image",
+        tags=["Review"],
+        dependencies=[Depends(require_admin)],
+    )
+    def review_image(document_id: str, number: int, version_id: str, request: Request):
+        ctx = request.app.state.ctx
+        version = pending_review(ctx, document_id, version_id)
+        if not 1 <= number <= version["page_count"]:
+            raise HTTPException(404, "Halaman tidak ditemukan.")
+        image = render_page(version["path"], number, maximum=2400)
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=92)
+        return Response(buffer.getvalue(), media_type="image/jpeg")
+
+    @app.put(
+        "/api/admin/documents/{document_id}/review/pages/{number}",
+        tags=["Review"],
+        dependencies=[Depends(require_admin)],
+    )
+    def save_review_page(document_id: str, number: int, body: ReviewEdit, request: Request):
+        ctx = request.app.state.ctx
+        if body.blank and body.text.strip():
+            raise HTTPException(422, "Halaman kosong tidak boleh berisi teks.")
+        if body.confirmed and not body.text.strip() and not body.blank:
+            raise HTTPException(422, "Isi teks atau tandai bahwa halaman memang kosong.")
+        with ctx.mutation_lock:
+            version = pending_review(ctx, document_id, body.version_id)
+            if version["status"] != "review":
+                raise HTTPException(409, "Review belum siap atau pemrosesan sedang berjalan.")
+            with ctx.db.connect() as conn:
+                result = conn.execute(
+                    "UPDATE review_pages SET text=?,confirmed=?,method='manual',revision=revision+1 WHERE version_id=? AND number=? AND revision=?",
+                    (body.text, int(body.confirmed), version["id"], number, body.revision),
+                )
+                if not result.rowcount:
+                    raise HTTPException(409, "Halaman sudah berubah. Muat ulang review sebelum menyimpan.")
+        return {"ok": True, "revision": body.revision + 1}
+
+    @app.post(
+        "/api/admin/documents/{document_id}/review/activate", tags=["Review"], dependencies=[Depends(require_admin)]
+    )
+    def activate_review(document_id: str, body: ReviewVersion, request: Request):
+        ctx = request.app.state.ctx
+        with ctx.mutation_lock:
+            version = pending_review(ctx, document_id, body.version_id)
+            if version["status"] != "review":
+                raise HTTPException(409, "Review belum siap atau pemrosesan sedang berjalan.")
+            if ctx.ingestion.jobs.qsize() >= 5:
+                raise HTTPException(429, "Antrean pemrosesan penuh.")
+            with ctx.db.connect() as conn:
+                pages = conn.execute(
+                    "SELECT * FROM review_pages WHERE version_id=? ORDER BY number", (version["id"],)
+                ).fetchall()
+                if len(pages) != version["page_count"] or any(
+                    row["number"] != i or not row["confirmed"] for i, row in enumerate(pages, 1)
+                ):
+                    raise HTTPException(409, "Cocokkan dan konfirmasi seluruh halaman sebelum membuat indeks.")
+                if not any(row["text"].strip() for row in pages) or sum(len(row["text"]) for row in pages) > 5_000_000:
+                    raise HTTPException(422, "Isi dokumen kosong atau terlalu besar.")
+                conn.execute("DELETE FROM pages WHERE version_id=?", (version["id"],))
+                conn.executemany(
+                    "INSERT INTO pages VALUES (?,?,?,?,?)",
+                    [
+                        (
+                            version["id"],
+                            row["number"],
+                            row["text"],
+                            "manual-reviewed-v1",
+                            "Teks dikonfirmasi admin melalui review per halaman.",
+                        )
+                        for row in pages
+                    ],
+                )
+                conn.execute(
+                    "UPDATE versions SET ocr_mode='manual',status='processing',stage='Membuat indeks hasil review',progress=0,error='' WHERE id=?",
+                    (version["id"],),
+                )
             ctx.ingestion.enqueue(version["id"])
         return {"ok": True}
 

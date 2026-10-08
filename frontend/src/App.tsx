@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { api, setCsrf } from './api';
 import type { Doc, Health, Source } from './api';
+import { DocumentReview } from './DocumentReview';
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
@@ -506,6 +507,7 @@ function Admin({ health }: { health: Health | null }) {
   const [editing, setEditing] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [deleting, setDeleting] = useState<Doc | null>(null);
+  const [reviewing, setReviewing] = useState<Doc | null>(null);
   const refresh = () => api<Doc[]>('/admin/documents').then(setDocs);
   useEffect(() => {
     let alive = true;
@@ -802,12 +804,27 @@ function Admin({ health }: { health: Health | null }) {
                 jika hasilnya belum konsisten. Model chatbot tetap GPT-4o mini.
               </p>
               <div className="development-note">
-                <span>RENCANA PENGEMBANGAN</span>
-                <p>Pratinjau hasil ekstraksi per halaman dan koreksi manual oleh admin.</p>
-                <small>Fitur ini belum tersedia pada prototype.</small>
+                <span>REVIEW OLEH ADMIN</span>
+                <p>
+                  Gunakan “Review dan koreksi” pada dokumen gagal. Gambar asli dan teks ditampilkan
+                  per halaman; setiap halaman perlu dikonfirmasi sebelum pembuatan indeks.
+                </p>
+                <small>Penyiapan review lokal tidak menggunakan OCR AI berbayar.</small>
               </div>
             </aside>
           </div>
+          {reviewing && (
+            <DocumentReview
+              key={reviewing.id}
+              doc={reviewing}
+              onClose={() => setReviewing(null)}
+              onIndexed={() => {
+                setReviewing(null);
+                refresh();
+                setNotice('Hasil review masuk antrean pembuatan indeks.');
+              }}
+            />
+          )}
           <section className="panel documents-panel">
             <div className="panel-heading">
               <h2>Dokumen knowledge base</h2>
@@ -834,7 +851,9 @@ function Admin({ health }: { health: Health | null }) {
                             ? 'Siap digunakan'
                             : doc.status === 'failed'
                               ? 'Gagal diproses'
-                              : 'Sedang diproses'}
+                              : doc.status === 'review'
+                                ? 'Menunggu review'
+                                : 'Sedang diproses'}
                         </span>
                       </div>
                       <p className="document-meta">
@@ -923,23 +942,25 @@ function Admin({ health }: { health: Health | null }) {
                               }}
                             />
                           </label>
-                          {doc.status === 'failed' && (
+                          {(doc.status === 'failed' || doc.status === 'review') && (
                             <>
-                              <button
-                                className="text-button"
-                                disabled={busy}
-                                onClick={() =>
-                                  action(
-                                    () =>
-                                      api('/admin/documents/' + doc.id + '/retry', {
-                                        method: 'POST',
-                                      }),
-                                    'Dokumen masuk antrean proses ulang.',
-                                  )
-                                }
-                              >
-                                Proses ulang
-                              </button>
+                              {doc.status === 'failed' && (
+                                <button
+                                  className="text-button"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    action(
+                                      () =>
+                                        api('/admin/documents/' + doc.id + '/retry', {
+                                          method: 'POST',
+                                        }),
+                                      'Dokumen masuk antrean proses ulang.',
+                                    )
+                                  }
+                                >
+                                  Proses ulang
+                                </button>
+                              )}
                               <button
                                 className="text-button"
                                 disabled={busy || !health?.ai_ready}
@@ -957,6 +978,24 @@ function Admin({ health }: { health: Health | null }) {
                                 Baca dengan AI
                               </button>
                             </>
+                          )}
+                          {(doc.status === 'failed' ||
+                            doc.status === 'review' ||
+                            (doc.status === 'processing' && doc.ocr_mode === 'review')) && (
+                            <button
+                              className="text-button"
+                              disabled={busy}
+                              onClick={() =>
+                                action(async () => {
+                                  await api('/admin/documents/' + doc.id + '/review', {
+                                    method: 'POST',
+                                  });
+                                  setReviewing(doc);
+                                }, 'Review dokumen dibuka. Cocokkan dan konfirmasi setiap halaman sebelum membuat indeks.')
+                              }
+                            >
+                              Review dan koreksi
+                            </button>
                           )}
                           <button
                             className="text-button danger"

@@ -37,11 +37,11 @@ Kedua dokumen pedoman tidak otomatis menjadi knowledge base. Instalasi baru dimu
 - Jawaban streaming dan penanganan kesalahan yang dapat dipahami pengguna.
 - Proteksi berlapis terhadap prompt injection, penyalahgunaan API, dan akses admin tanpa izin.
 - Dokumentasi API, README, bukti pengujian, serta panduan demo/video.
+- Review gambar asli dan koreksi teks per halaman oleh admin, ditambahkan atas permintaan pengguna 8 Oktober 2026. Draft lokal tidak menggunakan OCR AI; seluruh halaman harus dikonfirmasi sebelum indeks dibuat dan versi diaktifkan.
 
 ### Pengembangan lanjutan, belum diimplementasikan
 
 - Pemilihan model atau provider AI oleh admin dan pengisian API key melalui UI.
-- Pratinjau serta koreksi manual hasil OCR per halaman.
 - Klasifikasi dokumen publik/rahasia dan hak akses dokumen per pengguna.
 - Riwayat chat lintas sesi, akun pengguna umum, dan pengelolaan banyak admin.
 - Dukungan format selain PDF, deployment aplikasi penuh ke cloud, dan sinkronisasi knowledge base antar-PC.
@@ -156,7 +156,7 @@ Urutan pemrosesan:
 
 Parameter awal untuk eksperimen, bukan nilai final yang sudah terbukti: chunk sekitar 500-800 token, overlap sekitar 80-120 token. Kalibrasi menggunakan kedua bahan uji; tabel atau ketentuan yang saling terkait tidak dipotong sembarangan.
 
-Confidence OCR dan kecocokan dua mesin bukan jaminan benar. Selama pengembangan, hasil 12 halaman dokumen scan diperiksa terhadap gambar sumber, terutama pangkat, pendidikan, angka, tanggal, syarat, dan kata negasi. Pemeriksaan ini merupakan QA peserta; fitur koreksi manual di UI admin tetap di luar prototype.
+Confidence OCR dan kecocokan dua mesin bukan jaminan benar. Hasil scan perlu diperiksa terhadap gambar sumber, terutama pangkat, pendidikan, angka, tanggal, syarat, dan kata negasi. Permintaan pengguna pada 8 Oktober 2026 memperluas prototype dengan review dan koreksi per halaman: preview hanya untuk admin, draft persisten, konfirmasi tiap halaman, penolakan edit dari tab lama, dan aktivasi setelah seluruh halaman dikonfirmasi serta embedding berhasil.
 
 Keterangan wajib di admin:
 
@@ -164,9 +164,9 @@ Keterangan wajib di admin:
 >
 > Ekstraksi dokumen scan dapat menghasilkan kesalahan, terutama pada angka, tabel, dan kata yang memengaruhi makna ketentuan. Pemeriksaan hasil OCR tetap diperlukan sebelum penggunaan operasional.
 >
-> **Rencana pengembangan:** pratinjau hasil ekstraksi per halaman dan koreksi manual oleh admin.
+> **Review oleh admin:** gunakan Review dan koreksi pada dokumen gagal; cocokkan gambar asli dan teks, lalu konfirmasi setiap halaman sebelum membuat indeks.
 
-Keterangan pengembangan ditampilkan sebagai informasi, bukan tombol fitur aktif. Status pemrosesan dan peringatan yang benar-benar dihasilkan pipeline tetap ditampilkan.
+Review dan koreksi merupakan fitur aktif. Penyiapan draft memakai hasil yang sudah tersedia dan OCR lokal, tanpa API vision. Embedding hasil review tetap menggunakan layanan AI berbayar. Status pemrosesan dan peringatan yang benar-benar dihasilkan pipeline tetap ditampilkan.
 
 ## 7. Retrieval dan percakapan
 
@@ -301,7 +301,7 @@ Pengujian berfokus pada perilaku yang memengaruhi kebenaran, keamanan, persisten
 - Catatan hasil evaluasi retrieval, jawaban, OCR, keamanan, dan latency.
 - Panduan demo: mulai KB kosong, upload dua dokumen, tunjukkan status, tanya lintas sumber, follow-up, abstain, referensi, dan persistensi.
 - Outline/naskah video dengan kamera peserta: perkenalan, stack, arsitektur, ingestion/parsing/chunking/embedding, vector database, pemilihan LLM, prompt, pengurangan halusinasi, sumber jawaban, keterbatasan, dan pengembangan lanjutan. Perekaman video dilakukan peserta.
-- Keterbatasan terdokumentasi: ketergantungan internet/API, potensi kesalahan OCR/retrieval/LLM, belum ada klasifikasi akses dokumen, serta belum ada pratinjau/koreksi OCR manual.
+- Keterbatasan terdokumentasi: ketergantungan internet/API, potensi kesalahan OCR/retrieval/LLM, serta belum ada klasifikasi akses dokumen. Review manual membantu koreksi tanpa menjamin ketepatan seluruh isi.
 
 ## 13. Hal yang diputuskan melalui eksperimen implementasi
 

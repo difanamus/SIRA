@@ -224,6 +224,82 @@ def test_read_ai_replaces_scan_cache_persists_mode_and_resumes_without_recharge(
     assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 401
 
 
+def test_manual_review_lifecycle_auth_stale_edits_blank_and_atomic_activation(harness, monkeypatch):
+    from backend.app.db import Database
+
+    client, ctx, ai, settings = harness
+    doc_id = upload(client)
+    previous = wait_document(ctx, doc_id)["active_version"]
+    calls = []
+    text = "Halaman pengujian review: nilai minimal 53 untuk semester II tahun 2025, tidak otomatis lulus. " * 2
+    monkeypatch.setattr("pdfplumber.page.Page.extract_text", lambda *a, **kw: "")
+
+    def scan(image):
+        calls.append("scan")
+        if len(calls) == 1:
+            return text, "ocr+ai-4.1-mini-crops-v1", "Periksa hasil AI."
+        raise AIError("Hasil OCR berbeda dan perlu review.")
+
+    local = []
+
+    def local_scan(image):
+        local.append(1)
+        return (text if len(local) == 1 else ""), 80
+
+    monkeypatch.setattr(ctx.ingestion, "extract_scan", scan)
+    monkeypatch.setattr(ctx.ingestion, "extract_local", local_scan)
+    replacement = client.put(
+        f"/api/admin/documents/{doc_id}/file", files={"file": ("scan.pdf", pdf_bytes(pages=3), "application/pdf")}
+    )
+    assert replacement.status_code == 202
+    wait_document(ctx, doc_id, "failed")
+    base = f"/api/admin/documents/{doc_id}/review"
+    embeddings_before = ai.embeddings
+    assert client.post(base, headers={"X-CSRF-Token": "bad"}).status_code == 403
+    assert client.post(base).status_code == 200
+    doc = wait_document(ctx, doc_id, "review")
+    assert doc["active_version"] == previous and ai.embeddings == embeddings_before
+    review = client.get(base).json()
+    assert len(review["pages"]) == 3 and len(local) == 2
+    assert review["pages"][0]["method"] == "ocr+ai-4.1-mini-crops-v1"
+    version = {"version_id": review["version_id"]}
+    assert client.post(base + "/activate", json=version).status_code == 409
+    image = client.get(base + "/pages/1/image", params=version)
+    assert image.status_code == 200 and image.headers["content-type"] == "image/jpeg"
+    assert image.content.startswith(b"\xff\xd8")
+    assert client.get(base + "/pages/0/image", params=version).status_code == 404
+    assert client.get(base + "/pages/1/image", params={"version_id": "0" * 32}).status_code == 409
+    first = {**version, "revision": 0, "text": text.replace("53", "54"), "confirmed": True}
+    assert client.put(base + "/pages/1", json={**first, "version_id": "0" * 32}).status_code == 409
+    assert client.put(base + "/pages/1", json=first).json()["revision"] == 1
+    assert client.put(base + "/pages/1", json=first).status_code == 409  # Stale tab cannot overwrite a correction.
+    assert (
+        client.put(base + "/pages/2", json={**version, "revision": 0, "text": text, "confirmed": True}).status_code
+        == 200
+    )
+    empty = {**version, "revision": 0, "text": "", "confirmed": True}
+    assert client.put(base + "/pages/3", json=empty).status_code == 422
+    assert client.put(base + "/pages/3", json={**empty, "blank": True}).status_code == 200
+    reopened = Database(settings.data_dir)
+    reopened.recover()
+    assert reopened.document_list()[0]["status"] == "review"
+    assert all(row["confirmed"] for row in reopened.rows("SELECT * FROM review_pages"))
+    ai.fail = True
+    assert client.post(base + "/activate", json=version).status_code == 200
+    failed = wait_document(ctx, doc_id, "failed")
+    assert failed["active_version"] == previous and failed["ocr_mode"] == "manual"
+    ai.fail = False
+    assert client.post(f"/api/admin/documents/{doc_id}/retry").status_code == 200
+    ready = wait_document(ctx, doc_id)
+    assert ready["active_version"] != previous and len(local) == 2 and len(calls) == 2
+    page = ctx.db.one("SELECT * FROM pages WHERE version_id=? AND number=1", (ready["active_version"],))
+    assert "54" in page["text"] and page["method"] == "manual-reviewed-v1"
+    assert client.get(base).status_code == 409
+    client.cookies.clear()
+    assert client.get(base + "/pages/1/image", params=version).status_code == 401
+    assert client.get(base).status_code == 401
+
+
 def test_delete_invalidates_history_and_vectors(harness):
     client, ctx, ai, _ = harness
     doc_id = upload(client)

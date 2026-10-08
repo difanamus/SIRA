@@ -43,6 +43,7 @@ Gunakan alamat `127.0.0.1` yang sama secara konsisten agar pemeriksaan origin da
 2. Upload PDF dengan judul yang jelas. Batas 100 MiB dan 300 halaman secara default. PDF terenkripsi, rusak, dan non-PDF ditolak.
 3. Tunggu status siap. Pemrosesan berjalan di background dengan progres. PDF scan membutuhkan waktu OCR dan mungkin bantuan vision.
    Jika gagal, **Baca dengan AI** membaca scan langsung dengan GPT-4.1 mini melalui dua pembacaan terpisah. Ini menggunakan API berbayar; chatbot tetap GPT-4o mini. Mode disimpan dan **Proses ulang** melanjutkan mode terakhir serta memakai cache halaman yang sudah lolos. Dokumen tetap ditahan bila hasil belum konsisten. Tidak perlu upload ulang.
+   Alternatif: pilih **Review dan koreksi**. Sistem menyiapkan teks secara lokal, mempertahankan halaman hasil AI yang sudah tersedia, lalu menampilkan gambar asli dan editor per halaman. Koreksi teks, tandai sudah dicocokkan, dan simpan setiap halaman. Halaman kosong memerlukan penandaan eksplisit. Setelah seluruh halaman dikonfirmasi, pilih **Buat indeks dari hasil review**. Langkah terakhir hanya memakai embedding, tanpa OCR AI ulang. Draft tetap tersimpan setelah refresh/restart; versi lama tetap aktif hingga indeks baru berhasil.
 4. Ajukan pertanyaan di chat. Pertanyaan lanjutan menggunakan maksud pertanyaan sebelumnya dan retrieval baru. SIRA meminta klarifikasi jika konteks belum cukup.
 5. Ubah judul tanpa embedding ulang, ganti PDF melalui versi baru, atau hapus melalui admin. Versi lama tetap aktif jika penggantian gagal. Pekerjaan yang terputus ditandai gagal saat startup dan dapat diproses ulang.
 
@@ -101,7 +102,7 @@ Runtime test memerlukan hasil bundel `worker/dist/index.js`; seluruh tes memakai
 
 - Proteksi prompt injection berlapis mengurangi risiko; hasil uji tidak menjamin model kebal terhadap semua jailbreak.
 - Seluruh dokumen aktif dapat menjadi bahan jawaban. Referensi tanpa tautan tidak menerapkan klasifikasi kerahasiaan atau hak akses isi.
-- OCR memakai dua potongan gambar agar teks padat lebih terbaca. Perbedaan OCR/vision memicu pembacaan ulang dari gambar asli; versi ditolak jika masih tidak konsisten pada angka, negasi, periode semester, atau isi. Confidence tinggi maupun dua pembacaan yang sepakat tetap tidak menjamin benar. Pratinjau/koreksi manual ditampilkan sebagai rencana pengembangan di admin.
+- OCR memakai dua potongan gambar agar teks padat lebih terbaca. Perbedaan OCR/vision memicu pembacaan ulang dari gambar asli; versi ditolak jika masih tidak konsisten pada angka, negasi, periode semester, atau isi. Confidence tinggi maupun dua pembacaan yang sepakat tetap tidak menjamin benar. Admin dapat melakukan review dan koreksi per halaman; konfirmasi admin juga tidak menjamin semua kesalahan telah terdeteksi.
 - Pemilihan provider/model, klasifikasi dokumen, banyak admin, riwayat lintas sesi, dan deployment aplikasi penuh ke cloud merupakan pengembangan lanjutan.
 - Ambang retrieval, kelengkapan jawaban tabel/rumus, kualitas OCR, serta latency OpenAI perlu dievaluasi menggunakan dokumen dan koneksi nyata.
 - Jawaban faktual tanpa referensi memicu satu pengulangan terbatas. Draft diganti di UI; jika masih tanpa referensi, jawaban ditandai gagal. Ini dapat menambah waktu pada kasus tersebut.
@@ -113,7 +114,8 @@ Runtime test memerlukan hasil bundel `worker/dist/index.js`; seluruh tes memakai
 | AI belum dikonfigurasi | Isi relay URL/token pada `.env`, restart backend, uji koneksi dari admin |
 | Relay menolak akses | Periksa token, aktivasi, tanggal kedaluwarsa, dan kuota melalui pemilik relay |
 | OCR tidak tersedia | Jalankan setup OCR atau periksa path dan `tesseract --list-langs` |
-| Ingestion gagal pada angka/negasi | Periksa halaman sumber yang disebut; jangan memaksa aktivasi teks yang belum terverifikasi |
+| Ingestion gagal pada angka/negasi | Gunakan Review dan koreksi untuk mencocokkan gambar serta memperbaiki teks; atau Baca dengan AI jika kuota tersedia |
+| Kuota total relay tidak cukup | Review lokal tetap dapat disiapkan. Penambahan kuota OCR membutuhkan keputusan pemilik layanan; menunggu tidak mereset batas total. Indeks tetap memerlukan kuota embedding |
 | Login/CSRF gagal | Gunakan `http://127.0.0.1:8000` atau port yang dipilih `start.ps1`, login ulang |
 | Pemrosesan terputus | Restart, login admin, pilih proses ulang; versi lama yang siap tetap tersedia |
 | Frontend belum dibangun | Jalankan `npm ci` lalu `npm run build` dalam `frontend/` |

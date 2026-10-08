@@ -26,6 +26,21 @@ from .config import ROOT
 log = logging.getLogger("sira.ingestion")
 os.environ.setdefault("TIKTOKEN_CACHE_DIR", str(ROOT / "data" / "tokenizer"))
 ENCODING = tiktoken.get_encoding("cl100k_base")
+PDF_RENDER_LOCK = threading.RLock()
+
+
+def render_page(path, number, maximum=3000):
+    # PDFium is not thread-safe. Serialize native rendering in ingestion and admin preview.
+    with PDF_RENDER_LOCK, pdfium.PdfDocument(path) as pdf:
+        page = pdf[number - 1]
+        try:
+            bitmap = page.render(scale=min(3.0, maximum / max(page.get_size())))
+            try:
+                return bitmap.to_pil().copy()
+            finally:
+                bitmap.close()
+        finally:
+            page.close()
 
 
 def preprocess(image):
@@ -169,7 +184,11 @@ class Ingestion:
             if version is None:
                 break
             try:
-                self.process(version)
+                row = self.db.one("SELECT ocr_mode FROM versions WHERE id=?", (version,))
+                if row and row["ocr_mode"] == "review":
+                    self.prepare_review(version)
+                else:
+                    self.process(version)
             except Exception as exc:
                 message = (
                     str(exc)
@@ -192,13 +211,12 @@ class Ingestion:
                 with self.db.connect() as conn:
                     conn.execute("DELETE FROM chunks WHERE version_id=?", (row["id"],))
                     conn.execute("DELETE FROM pages WHERE version_id=?", (row["id"],))
+                    conn.execute("DELETE FROM review_pages WHERE version_id=?", (row["id"],))
                     conn.execute("DELETE FROM versions WHERE id=?", (row["id"],))
             except (OSError, RuntimeError):
                 log.warning("cleanup_pending")
 
-    def extract_scan(self, image):
-        original = image.copy()
-        image = preprocess(image)
+    def extract_local(self, image):
         try:
             data = pytesseract.image_to_data(
                 image, lang=self.settings.ocr_lang, config="--psm 3", output_type=pytesseract.Output.DICT, timeout=60
@@ -217,6 +235,12 @@ class Ingestion:
                 confidences.append(float(data["conf"][i]))
         text = "\n".join(" ".join(words) for words in lines.values())
         confidence = sum(confidences) / max(1, len(confidences))
+        return text, confidence
+
+    def extract_scan(self, image):
+        original = image.copy()
+        image = preprocess(image)
+        text, confidence = self.extract_local(image)
         warning = ""
         method = "ocr"
         doubtful = (
@@ -258,6 +282,63 @@ class Ingestion:
             "Kesepakatan AI bukan jaminan benar; angka dan ketentuan tetap perlu verifikasi manusia.",
         )
 
+    def prepare_review(self, version_id):
+        version = self.db.one("SELECT * FROM versions WHERE id=?", (version_id,))
+        self.assert_live(version_id)
+        total_size = 0
+        with pdfplumber.open(version["path"]) as pdf:
+            if not 1 <= len(pdf.pages) <= self.settings.max_pages:
+                raise AIError("Jumlah halaman PDF melewati batas.")
+            self.update(version_id, page_count=len(pdf.pages))
+            for number, page in enumerate(pdf.pages, 1):
+                self.assert_live(version_id)
+                existing = self.db.one(
+                    "SELECT * FROM review_pages WHERE version_id=? AND number=?", (version_id, number)
+                )
+                if existing:
+                    total_size += len(existing["text"])
+                    continue
+                accepted = self.db.one("SELECT * FROM pages WHERE version_id=? AND number=?", (version_id, number))
+                text = accepted["text"] if accepted else (page.extract_text(layout=False) or "")
+                method = accepted["method"] if accepted else "text"
+                warning = "Periksa seluruh isi halaman, terutama angka, periode, negasi, dan tabel."
+                self.update(
+                    version_id,
+                    stage=f"Menyiapkan review: halaman {number}/{len(pdf.pages)}",
+                    progress=int(number / len(pdf.pages) * 95),
+                )
+                if not accepted and not readable(text):
+                    if page.width * page.height > 10_000_000:
+                        raise AIError("Ukuran halaman terlalu besar untuk diproses dengan aman.")
+                    image = render_page(version["path"], number)
+                    if ImageOps.grayscale(image).getextrema()[0] > 245:
+                        text, method = "", "blank"
+                    else:
+                        try:
+                            text, _ = self.extract_local(preprocess(image))
+                            method = "ocr-local-draft"
+                        except AIError:
+                            text, method = "", "unreadable"
+                            warning = "OCR lokal tidak tersedia atau gagal. Salin teks dari gambar secara manual."
+                if len(text) > 100_000:
+                    raise AIError(f"Halaman {number}: teks terlalu panjang untuk review. Pisahkan PDF.")
+                total_size += len(text)
+                if total_size > 5_000_000:
+                    raise AIError("Teks PDF terlalu besar. Pisahkan PDF.")
+                self.db.execute(
+                    "INSERT OR IGNORE INTO review_pages(version_id,number,text,method,warning) VALUES (?,?,?,?,?)",
+                    (version_id, number, text, method, warning),
+                )
+        self.assert_live(version_id)
+        self.update(
+            version_id,
+            status="review",
+            stage="Menunggu review admin",
+            progress=100,
+            error="",
+            warning="Teks belum menjadi knowledge base. Cocokkan dan konfirmasi setiap halaman sebelum membuat indeks.",
+        )
+
     def process(self, version_id):
         started = time.monotonic()
         version = self.db.one("SELECT * FROM versions WHERE id=?", (version_id,))
@@ -275,60 +356,48 @@ class Ingestion:
                 if not 1 <= len(pdf.pages) <= self.settings.max_pages:
                     raise AIError(f"PDF harus berisi 1-{self.settings.max_pages} halaman.")
                 self.update(version_id, page_count=len(pdf.pages), stage="Ekstraksi halaman", progress=2)
-                with pdfium.PdfDocument(version["path"]) as rendered:
-                    for number, page in enumerate(pdf.pages, 1):
-                        self.assert_live(version_id)
-                        if page.width * page.height > 10_000_000:
-                            raise AIError("Ukuran halaman terlalu besar untuk diproses dengan aman.")
-                        cached = self.db.one(
-                            "SELECT * FROM pages WHERE version_id=? AND number=?", (version_id, number)
-                        )
-                        if cached and cached["method"].startswith("ocr"):
-                            required = "ai-4.1-mini-crops-v1" if version["ocr_mode"] == "ai" else "crops-v1"
-                            if not cached["method"].endswith(required):
-                                cached = None
-                        text = cached["text"] if cached else (page.extract_text(layout=False) or "")
-                        method, warning = (cached["method"], cached["warning"]) if cached else ("text", "")
-                        if not cached and not readable(text):
-                            bitmap_page = rendered[number - 1]
-                            scale = min(3.0, 3000 / max(bitmap_page.get_size()))
-                            bitmap = bitmap_page.render(scale=scale)
+                for number, page in enumerate(pdf.pages, 1):
+                    self.assert_live(version_id)
+                    if page.width * page.height > 10_000_000:
+                        raise AIError("Ukuran halaman terlalu besar untuk diproses dengan aman.")
+                    cached = self.db.one("SELECT * FROM pages WHERE version_id=? AND number=?", (version_id, number))
+                    if cached and cached["method"].startswith("ocr"):
+                        required = "ai-4.1-mini-crops-v1" if version["ocr_mode"] == "ai" else "crops-v1"
+                        if not cached["method"].endswith(required):
+                            cached = None
+                    text = cached["text"] if cached else (page.extract_text(layout=False) or "")
+                    method, warning = (cached["method"], cached["warning"]) if cached else ("text", "")
+                    if not cached and not readable(text):
+                        image = render_page(version["path"], number)
+                        # Truly blank pages are recorded, never guessed.
+                        if ImageOps.grayscale(image).getextrema()[0] > 245:
+                            text, method = "", "blank"
+                        else:
                             try:
-                                image = bitmap.to_pil().copy()
-                            finally:
-                                bitmap.close()
-                                bitmap_page.close()
-                            # Truly blank pages are recorded, never guessed.
-                            if ImageOps.grayscale(image).getextrema()[0] > 245:
-                                text, method = "", "blank"
-                            else:
-                                try:
-                                    if version["ocr_mode"] == "ai":
-                                        self.update(
-                                            version_id, stage=f"Baca dengan AI: halaman {number}/{len(pdf.pages)}"
-                                        )
-                                        text, method, warning = self.extract_with_ai(image)
-                                    else:
-                                        text, method, warning = self.extract_scan(image)
-                                except AIError as exc:
-                                    raise AIError(f"Halaman {number}: {exc}") from exc
-                        if warning:
-                            warnings.append(f"Halaman {number}: {warning}")
-                        self.db.execute(
-                            "INSERT OR REPLACE INTO pages VALUES (?,?,?,?,?)",
-                            (version_id, number, text, method, warning),
-                        )
-                        page_chunks = chunk_page(text, version_id, number)
-                        pending_chunks.extend(page_chunks)
-                        text_size += sum(len(chunk["text"]) for chunk in page_chunks)
-                        if text_size > 5_000_000:
-                            raise AIError("Teks PDF terlalu besar. Pisahkan dokumen menjadi beberapa PDF.")
-                        self.update(
-                            version_id,
-                            stage=f"Halaman {number}/{len(pdf.pages)}",
-                            progress=min(70, int(number / len(pdf.pages) * 70)),
-                            warning="\n".join(warnings),
-                        )
+                                if version["ocr_mode"] == "ai":
+                                    self.update(version_id, stage=f"Baca dengan AI: halaman {number}/{len(pdf.pages)}")
+                                    text, method, warning = self.extract_with_ai(image)
+                                else:
+                                    text, method, warning = self.extract_scan(image)
+                            except AIError as exc:
+                                raise AIError(f"Halaman {number}: {exc}") from exc
+                    if warning:
+                        warnings.append(f"Halaman {number}: {warning}")
+                    self.db.execute(
+                        "INSERT OR REPLACE INTO pages VALUES (?,?,?,?,?)",
+                        (version_id, number, text, method, warning),
+                    )
+                    page_chunks = chunk_page(text, version_id, number)
+                    pending_chunks.extend(page_chunks)
+                    text_size += sum(len(chunk["text"]) for chunk in page_chunks)
+                    if text_size > 5_000_000:
+                        raise AIError("Teks PDF terlalu besar. Pisahkan dokumen menjadi beberapa PDF.")
+                    self.update(
+                        version_id,
+                        stage=f"Halaman {number}/{len(pdf.pages)}",
+                        progress=min(70, int(number / len(pdf.pages) * 70)),
+                        warning="\n".join(warnings),
+                    )
         except AIError:
             raise
         except Exception as exc:

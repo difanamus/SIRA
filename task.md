@@ -77,6 +77,7 @@ Aturan penggunaan:
 - [x] Menambahkan tombol admin **Baca dengan AI** (GPT-4.1 mini khusus scan), dua pembacaan terpisah, mode persisten, dan cache sesuai metode; model chat tetap GPT-4o mini.
 - [ ] Memverifikasi hasil 12 halaman scan terhadap sumber, terutama angka, pangkat, pendidikan, tanggal, dan negasi.
 - [x] Menampilkan keterangan akurasi OCR serta rencana pratinjau/koreksi manual secara jelas di admin.
+- [x] Menyediakan review gambar dan editor teks per halaman, draft persisten, konfirmasi admin, serta aktivasi setelah embedding berhasil.
 - [ ] Menyelesaikan ingestion pengumuman SBP dan memeriksa metadata halaman.
 
 ## 5. Retrieval, jawaban, dan sesi chat
@@ -143,7 +144,7 @@ Aturan penggunaan:
 
 ## Pengembangan lanjutan (di luar checklist kelulusan prototype)
 
-- [ ] Pratinjau hasil OCR per halaman dan koreksi manual oleh admin.
+- [x] Pratinjau hasil OCR per halaman dan koreksi manual oleh admin (dipindahkan ke prototype atas permintaan pengguna 8 Oktober 2026).
 - [ ] Pemilihan model/provider dan pengaturan API key melalui admin.
 - [ ] Klasifikasi serta hak akses dokumen per pengguna.
 - [ ] Format dokumen tambahan, deployment penuh ke cloud, dan sinkronisasi antar-PC.
@@ -158,3 +159,4 @@ Aturan penggunaan:
 - 8 Oktober 2026: evaluasi GPT nyata dengan PDF sintetis injeksi, serangan multi-turn, follow-up, dan konflik dua sumber lulus. Pengulangan jawaban tanpa referensi dibatasi satu kali; draft diganti sebelum hasil dinyatakan selesai. Scan SBP masih ditahan pada halaman 3; pilihan model OCR tambahan menunggu pengguna, tanpa perubahan pada model chat.
 - 8 Oktober 2026: pengguna menyetujui pembacaan AI untuk scan gagal. Tombol **Baca dengan AI** tersedia; 25 tes backend dan 5 policy + 4 runtime Worker lulus. GPT-4.1 mini hanya untuk mode OCR tersebut, tanpa mengubah model chat, kuota, atau masa aktif relay.
 - 8 Oktober 2026: tombol diuji melalui browser desktop/mobile. GPT-4.1 mini menerima scan halaman 1–4; halaman 3 sudah membaca periode semester dengan benar. Halaman 5 tertahan kuota total relay 2 juta unit, bukan perbedaan OCR. Cache empat halaman berhasil dipakai saat resume. Kenaikan kuota ke 4 juta menunggu persetujuan pengguna. Tes terbaru: 26 backend, 5 policy Worker, 5 runtime Worker lulus; 1 tes live opt-in dilewati.
+- 8 Oktober 2026: permintaan pengguna untuk opsi review sudah diimplementasikan dan diuji di browser desktop/mobile. Seluruh 12 draft SBP tersedia untuk review lokal, 0/12 dikonfirmasi, dokumen belum aktif. Koreksi tersimpan persisten, tab lama ditolak, aktivasi menunggu konfirmasi seluruh halaman serta embedding berhasil. 27 tes backend lulus; 1 live opt-in dilewati. Estimasi biaya OCR tambahan tersedia di `docs/ocr-cost.md`; kuota relay tetap 2 juta.

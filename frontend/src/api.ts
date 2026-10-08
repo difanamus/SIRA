@@ -42,5 +42,5 @@ export type Doc = {
   size: number;
   available: number;
   pending_version: string | null;
-  ocr_mode: 'auto' | 'ai';
+  ocr_mode: 'auto' | 'ai' | 'review' | 'manual';
 };

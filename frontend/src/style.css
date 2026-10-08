@@ -1388,6 +1388,132 @@ textarea::placeholder {
   flex-wrap: wrap;
   gap: 8px;
 }
+.review-panel {
+  margin: 24px 0;
+  scroll-margin-top: 20px;
+}
+.review-panel .panel-heading p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.review-intro,
+.review-footer {
+  padding: 20px 24px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.review-intro p {
+  margin: 0 0 10px;
+}
+.review-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 24px 20px;
+}
+.review-pages .current {
+  border-color: #b38a48;
+  background: #faf5eb;
+}
+.review-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 0 24px 24px;
+}
+.review-columns > div {
+  min-width: 0;
+}
+.review-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 42px;
+  gap: 12px;
+  font-size: 12px;
+}
+.review-image {
+  height: 65vh;
+  min-height: 360px;
+  overflow: auto;
+  border: 1px solid #dce3e8;
+  background: #f4f6f8;
+  border-radius: 8px;
+}
+.review-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.review-image img.zoomed {
+  width: 160%;
+  min-width: 1000px;
+  max-width: none;
+}
+.review-text {
+  display: block;
+  width: 100%;
+  height: 65vh;
+  min-height: 360px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.review-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.review-check input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+}
+.review-warning {
+  font-size: 11px;
+  color: #8b632b;
+  line-height: 1.7;
+}
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.review-footer {
+  border-top: 1px solid #e2e7eb;
+}
+.status-tag.review {
+  color: #8b632b;
+  background: #faf5eb;
+}
+@media (max-width: 900px) {
+  .review-columns {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 16px 16px;
+    gap: 16px;
+  }
+  .review-intro,
+  .review-footer {
+    padding: 16px;
+  }
+  .review-pages {
+    padding: 0 16px 16px;
+  }
+  .review-image,
+  .review-text {
+    height: 55vh;
+    min-height: 300px;
+  }
+  .review-label {
+    flex-wrap: wrap;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;

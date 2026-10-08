@@ -6,7 +6,7 @@ Gunakan dokumen yang diizinkan untuk bahan uji. Jangan merekam terminal setup ke
 
 1. Perkenalkan SIRA sebagai Asisten Informasi SDM Polri. Tampilkan chat dengan KB kosong dan pemberitahuan belum ada dokumen.
 2. Buka `/admin`, login, tunjukkan pemeriksaan koneksi AI, lalu upload `PERPOL NO 1 TAHUN 2025.pdf` dengan judul yang sesuai. Jelaskan status/progres sampai siap.
-3. Upload `PENGUMUMAN SBP TA 2027.pdf`. Tunjukkan OCR lokal dan bantuan vision selektif. Jika gagal, tombol **Baca dengan AI** mencoba GPT-4.1 mini khusus scan. Jelaskan bahwa AI tetap dapat salah dan dokumen belum aktif jika pembacaan tidak konsisten atau kuota habis. Admin menampilkan rencana pratinjau/koreksi manual.
+3. Upload `PENGUMUMAN SBP TA 2027.pdf`. Tunjukkan OCR lokal dan bantuan vision selektif. Jika gagal, tombol **Baca dengan AI** mencoba GPT-4.1 mini khusus scan. Alternatif **Review dan koreksi** menampilkan gambar asli serta editor, menyimpan koreksi dan konfirmasi setiap halaman. Dokumen belum aktif sampai seluruh halaman dikonfirmasi dan indeks berhasil dibuat. Preview hanya tersedia untuk admin; pengguna chat tetap tidak mendapat tautan dokumen.
 4. Ajukan pertanyaan yang jawaban acuannya sudah diperiksa pada masing-masing dokumen. Tampilkan streaming dan referensi nama dokumen/halaman tanpa tombol unduh.
 5. Ajukan pertanyaan lanjutan yang bergantung pada pertanyaan sebelumnya. Hindari mengarang jawaban untuk contoh “kalau SMA?”; periksa isi pengumuman dan biarkan SIRA menyatakan jika informasi tidak tersedia.
 6. Coba pertanyaan ambigu tanpa konteks melalui percakapan baru, pertanyaan di luar KB, dan instruksi untuk mengabaikan sumber. Cocokkan hasil dengan kriteria evaluasi.
