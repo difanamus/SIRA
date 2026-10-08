@@ -3,12 +3,14 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
 [vars]
-# Enable only after configuring Secrets, expiry, and an agreed testing budget.
+# Enable only after configuring Secrets and expiry.
 RELAY_ENABLED = "false"
 RELAY_EXPIRES_AT = "2026-10-16T03:42:55Z"
 MAX_REQUESTS = "1000"
 MAX_TOKEN_UNITS = "2000000"
 REQUESTS_PER_MINUTE = "30"
+# Owner requested no cumulative request, unit, or application cost cap.
+TOTAL_QUOTA_ENABLED = "false"
 
 [[durable_objects.bindings]]
 name = "QUOTA"

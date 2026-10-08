@@ -21,7 +21,7 @@ $taskRelease = $taskRelease -replace 'RELAY_ENABLED = "(?:true|false)"', 'RELAY_
 $taskRelease = $taskRelease -replace 'RELAY_EXPIRES_AT = "[^"]+"', ('RELAY_EXPIRES_AT = "'+$taskExpiry+'"')
 Set-Content -LiteralPath $taskConfig -Value $taskRelease -Encoding utf8
 Write-Host 'Skrip ini mempublikasikan relay sira-relay ke akun Cloudflare CLI Anda.'
-Write-Host 'Batas awal: 1000 request, 2 juta unit reservasi, 30 request/menit. Lihat docs/relay-setup.md.'
+Write-Host 'Tanpa batas total request/unit/biaya aplikasi. Proteksi 30 request/menit tetap aktif. Lihat docs/relay-setup.md.'
 Write-Host 'Jika belum login, jalankan: cd worker; npx wrangler login'
 $taskSecret = Read-Host 'Masukkan API key OpenAI (input disembunyikan)' -AsSecureString
 $taskPtr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($taskSecret)

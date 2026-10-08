@@ -102,6 +102,39 @@ test('minute throttling is distinct from the total budget', async () => {
   }
 });
 
+test('owner can disable all cumulative caps while preserving throttling and payload validation', async () => {
+  let calls = 0;
+  const mf = runtime({
+    TOTAL_QUOTA_ENABLED: 'false',
+    MAX_REQUESTS: '1',
+    MAX_TOKEN_UNITS: '1',
+    RUN_BUDGET_ID: 'previous-test-budget',
+    RUN_BUDGET_MICRO_USD: '1',
+    REQUESTS_PER_MINUTE: '5',
+  }, () => calls++);
+  try {
+    assert.equal((await post(mf, '/embeddings', { input: ['Uji'], TOTAL_QUOTA_ENABLED: false })).status, 400);
+    const image = 'data:image/jpeg;base64,YWJj';
+    for (const [path, body] of [
+      ['/embeddings', { input: ['Uji'] }],
+      ['/vision', { image }],
+      ['/vision-fragment', { image }],
+      ['/answer', { question: 'Uji', history: [], sources: [source] }],
+      ['/embeddings', { input: ['Lanjutan'] }],
+    ]) {
+      const response = await post(mf, path, body);
+      assert.equal(response.status, 200);
+      await response.text();
+    }
+    const throttled = await post(mf);
+    assert.equal(throttled.status, 429);
+    assert.equal((await throttled.json()).code, 'relay_rate');
+    assert.equal(calls, 5);
+  } finally {
+    await mf.dispose();
+  }
+});
+
 test('expiry and revocation fail closed before upstream fetch', async () => {
   for (const bindings of [
     { RELAY_ENABLED: 'false' },

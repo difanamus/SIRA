@@ -9,6 +9,7 @@ interface Env {
   MAX_REQUESTS: string;
   MAX_TOKEN_UNITS: string;
   REQUESTS_PER_MINUTE: string;
+  TOTAL_QUOTA_ENABLED?: string;
   RUN_BUDGET_ID?: string;
   RUN_BUDGET_MICRO_USD?: string;
   QUOTA: DurableObjectNamespace;
@@ -49,13 +50,16 @@ export class Quota {
     }
     const { units, limits, budget, cost } = (await request.json()) as {
       units: number;
-      limits?: { requests: number; units: number; minute: number };
+      limits?: { requests: number; units: number; minute: number; totalEnabled?: boolean };
       budget?: { id: string; limit: number };
       cost?: number;
     };
     if (!Number.isSafeInteger(units) || units < 1 || units > 200000)
       return json('Reservasi tidak valid.', 400);
-    if (limits && Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1))
+    if (limits && (
+      [limits.requests, limits.units, limits.minute].some((value) => !Number.isSafeInteger(value) || value < 1) ||
+      (limits.totalEnabled !== undefined && typeof limits.totalEnabled !== 'boolean')
+    ))
       return json('Batas tidak valid.', 400);
     if (
       budget &&
@@ -79,8 +83,10 @@ export class Quota {
         counter.minuteRequests = 0;
       }
       if (
-        counter.requests >= (limits?.requests ?? positive(this.env.MAX_REQUESTS, 1000)) ||
-        counter.units + units > (limits?.units ?? positive(this.env.MAX_TOKEN_UNITS, 2000000))
+        limits?.totalEnabled !== false && (
+          counter.requests >= (limits?.requests ?? positive(this.env.MAX_REQUESTS, 1000)) ||
+          counter.units + units > (limits?.units ?? positive(this.env.MAX_TOKEN_UNITS, 2000000))
+        )
       ) {
         return json('Kuota total relay tidak mencukupi untuk permintaan ini.', 429, 'relay_budget');
       }
@@ -166,8 +172,12 @@ export default {
     }
     const quota = env.QUOTA.get(env.QUOTA.idFromName('testing-budget-v1'));
     const cost = reserveCost(prepared);
-    const budgetConfigured =
-      env.RUN_BUDGET_ID !== undefined || env.RUN_BUDGET_MICRO_USD !== undefined;
+    // Owner-controlled switch: remove cumulative test caps without clearing history
+    // or allowing clients to change quota policy. Minute throttling stays active.
+    const totalEnabled = env.TOTAL_QUOTA_ENABLED !== 'false';
+    const budgetConfigured = totalEnabled && (
+      env.RUN_BUDGET_ID !== undefined || env.RUN_BUDGET_MICRO_USD !== undefined
+    );
     const budget = budgetConfigured
       ? { id: env.RUN_BUDGET_ID ?? '', limit: Number(env.RUN_BUDGET_MICRO_USD) }
       : undefined;
@@ -187,6 +197,7 @@ export default {
         cost,
         budget,
         limits: {
+          totalEnabled,
           requests: positive(env.MAX_REQUESTS, 1000),
           units: positive(env.MAX_TOKEN_UNITS, 2000000),
           minute: positive(env.REQUESTS_PER_MINUTE, 30),
