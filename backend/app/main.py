@@ -46,7 +46,7 @@ class Question(StrictModel):
 
 
 class SessionLookup(StrictModel):
-    session_id: str = Field(min_length=20, max_length=100)
+    session_id: str | None = Field(default=None, min_length=20, max_length=100)
 
 
 class SessionCreate(StrictModel):
@@ -487,21 +487,42 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         return {"ok": True}
 
     @app.post("/api/chat/sessions", tags=["Chat"])
-    def chat_session(request: Request, body: SessionCreate | None = None):
+    def chat_session(request: Request, response: Response, body: SessionCreate | None = None):
         ctx = request.app.state.ctx
         check_origin(request, settings)
         ctx.limiter.check("sessions:" + request.client.host, 20)
-        return {"session_id": ctx.chat.create(body.previous_session_id if body else None)}
+        previous = (body.previous_session_id or request.cookies.get("sira_chat")) if body else None
+        token = ctx.chat.create(previous)
+        remember_chat(response, token)
+        return {"session_id": token}
+
+    def remember_chat(response, token):
+        response.set_cookie(
+            "sira_chat",
+            token,
+            max_age=400 * 24 * 60 * 60,
+            path="/api/chat",
+            httponly=True,
+            secure=settings.secure_cookie,
+            samesite="strict",
+        )
 
     @app.post("/api/chat/history", tags=["Chat"])
-    def chat_history(body: SessionLookup, request: Request):
+    def chat_history(request: Request, response: Response, body: SessionLookup | None = None):
         ctx = request.app.state.ctx
         check_origin(request, settings)
         ctx.limiter.check("history:" + request.client.host, 120)
-        session = ctx.chat.get(body.session_id)
+        token = body.session_id if body else None
+        cookie = request.cookies.get("sira_chat")
+        if not token:
+            token = cookie
+        if not token:
+            return {"session_id": None, "messages": []}
+        session = ctx.chat.get(token)
         if not session:
             raise HTTPException(410, "Percakapan sudah diganti atau tidak ditemukan. Silakan mulai percakapan baru.")
-        return {"messages": ctx.chat.history(session)}
+        remember_chat(response, token)
+        return {"session_id": token, "messages": ctx.chat.history(session)}
 
     @app.post("/api/chat", tags=["Chat"])
     async def ask(body: Question, request: Request):
@@ -516,9 +537,13 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         if session.lock.locked():
             raise HTTPException(409, "Tunggu hingga jawaban sebelumnya selesai.")
         ctx.limiter.check("chat:" + request.client.host, 15)
-        return StreamingResponse(
+        response = StreamingResponse(
             ctx.chat.stream(session, question), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"}
         )
+        # Bind legacy tabs too: they may send an existing session without ever
+        # running the newer localStorage/history bootstrap code.
+        remember_chat(response, body.session_id)
+        return response
 
     dist = ROOT / "frontend" / "dist"
     if (dist / "assets").exists():

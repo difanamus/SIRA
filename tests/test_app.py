@@ -162,6 +162,47 @@ def test_new_chat_revokes_old_session_and_history_is_isolated(harness):
     assert sid not in str(ctx.db.rows("SELECT * FROM chat_sessions"))
 
 
+def test_cookie_restores_history_without_browser_storage_and_new_chat_replaces_it(harness):
+    client, ctx, _, _ = harness
+    sid = session(client)
+    ask(client, sid, "Apa syarat SBP?")
+    history = client.post("/api/chat/history", json={})
+    assert history.status_code == 200 and history.json()["session_id"] == sid
+    assert len(history.json()["messages"]) == 2
+    cookie = history.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Path=/api/chat" in cookie
+    # Explicit invalid/revoked credentials must not be disguised by a valid cookie.
+    assert client.post("/api/chat/history", json={"session_id": "x" * 43}).status_code == 410
+    reset = client.post("/api/chat/sessions", json={"previous_session_id": None})
+    replacement = reset.json()["session_id"]
+    assert replacement != sid and ctx.chat.get(sid) is None
+    assert client.post("/api/chat/history", json={}).json() == {"session_id": replacement, "messages": []}
+
+
+def test_cookie_does_not_share_history_with_another_browser_or_cross_site(harness):
+    client, ctx, _, _ = harness
+    sid = session(client)
+    ask(client, sid, "Apa syarat SBP?")
+    assert client.post("/api/chat/history", json={}, headers={"Origin": "https://attacker.example"}).status_code == 403
+    client.cookies.clear()
+    assert client.post("/api/chat/history", json={}).json() == {"session_id": None, "messages": []}
+    # Existing installations can bind a cookie by restoring their local token.
+    restored = client.post("/api/chat/history", json={"session_id": sid})
+    assert restored.status_code == 200 and len(restored.json()["messages"]) == 2
+    assert client.cookies.get("sira_chat") == sid
+    assert ctx.chat.get(sid) is not None
+
+
+def test_existing_chat_from_legacy_page_rebinds_cookie_without_local_storage(harness):
+    client, _, _, _ = harness
+    sid = session(client)
+    client.cookies.clear()
+    ask(client, sid, "halo sira")
+    assert client.cookies.get("sira_chat") == sid
+    restored = client.post("/api/chat/history", json={}).json()
+    assert restored["session_id"] == sid and len(restored["messages"]) == 2
+
+
 def test_restart_retains_partial_reply_as_interrupted_without_using_it_as_context(harness):
     client, ctx, ai, settings = harness
     sid = session(client)

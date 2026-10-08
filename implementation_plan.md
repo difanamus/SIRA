@@ -208,7 +208,7 @@ Jika knowledge base kosong, tampilkan sapaan dan pemberitahuan bahwa belum ada d
 
 Sesi chat:
 
-- Riwayat dan konteks disimpan di SQLite, dipulihkan saat refresh, buka ulang browser yang sama, serta restart aplikasi. Browser hanya menyimpan token sesi acak pada localStorage; hash token dipakai di backend.
+- Riwayat dan konteks disimpan di SQLite, dipulihkan saat refresh, buka ulang browser yang sama, serta restart aplikasi. Browser menyimpan token sesi acak pada localStorage dan cookie HttpOnly/SameSite Strict sebagai cadangan; hash token dipakai di backend. Saat boot, UI selalu memeriksa sesi server walaupun localStorage kosong.
 - Tombol Percakapan baru menghapus pesan/konteks sesi lama dan mencabut token lama. Reset diterapkan pada tab lain dalam browser yang sama melalui perubahan penanda sesi.
 - Tidak ada kedaluwarsa percakapan karena idle. Cache objek sesi dapat dikeluarkan dari memori dan dimuat ulang dari database tanpa kehilangan konteks. Riwayat jawaban model tidak diteruskan sebagai sumber fakta; hanya pertanyaan terdahulu yang dipakai untuk memahami maksud.
 - Jawaban yang terputus tetap tersimpan sebagai belum selesai; pemulihan riwayat tidak memanggil model ulang. Kegagalan memuat riwayat tidak diam-diam membuat sesi kosong.

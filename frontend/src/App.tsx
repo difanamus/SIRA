@@ -204,7 +204,7 @@ function Chat({ health }: { health: Health | null }) {
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const session = useRef(initialSession);
-  const [restoring, setRestoring] = useState(Boolean(initialSession));
+  const [restoring, setRestoring] = useState(true);
   const [restoreError, setRestoreError] = useState('');
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [resetting, setResetting] = useState(false);
@@ -216,7 +216,6 @@ function Chat({ health }: { health: Health | null }) {
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => {
     const token = session.current;
-    if (!token) return;
     const current = generation.current;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -224,12 +223,16 @@ function Chat({ health }: { health: Health | null }) {
     async function restore() {
       if (cancelled || current !== generation.current) return;
       try {
-        const result = await api<{ messages: Message[] }>('/chat/history', {
-          method: 'POST',
-          body: JSON.stringify({ session_id: token }),
-          signal: controller.signal,
-        });
+        const result = await api<{ session_id: string | null; messages: Message[] }>(
+          '/chat/history',
+          {
+            method: 'POST',
+            body: JSON.stringify({ session_id: token || null }),
+            signal: controller.signal,
+          },
+        );
         if (cancelled || current !== generation.current) return;
+        if (result.session_id) rememberSession(result.session_id);
         setMessages(result.messages);
         setRestoreError('');
         const pending = result.messages.some((message) => message.pending);
@@ -261,9 +264,23 @@ function Chat({ health }: { health: Health | null }) {
       localStorage.setItem(CHAT_SESSION_KEY, token);
       setStorageWarning('');
     } catch {
-      setStorageWarning(
-        'Browser tidak dapat menyimpan sesi. Izinkan penyimpanan situs agar percakapan dapat dibuka kembali.',
-      );
+      // Storage may be blocked while the session cookie still works. Warn only
+      // when neither persistence credential can be confirmed for this browser.
+      api<{ session_id: string | null }>('/chat/history', { method: 'POST', body: '{}' })
+        .then((result) => {
+          if (session.current === token)
+            setStorageWarning(
+              result.session_id === token
+                ? ''
+                : 'Browser tidak dapat menyimpan sesi. Izinkan penyimpanan situs agar percakapan dapat dibuka kembali.',
+            );
+        })
+        .catch(() => {
+          if (session.current === token)
+            setStorageWarning(
+              'Penyimpanan sesi belum dapat dipastikan. Periksa koneksi dan izin penyimpanan situs sebelum menutup halaman.',
+            );
+        });
     }
   }
   useEffect(() => {
