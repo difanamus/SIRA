@@ -352,7 +352,7 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
             (version["id"],),
         )
         regions = ctx.db.rows(
-            "SELECT page,number,top,bottom,warning FROM ocr_regions WHERE version_id=? AND required=1 ORDER BY page,number",
+            "SELECT page,number,top,bottom,method,warning FROM ocr_regions WHERE version_id=? AND required=1 ORDER BY page,number",
             (version["id"],),
         )
         for page in pages:

@@ -1,4 +1,5 @@
 import { prepare } from './policy';
+import { actualCost, reserveCost } from './cost';
 
 interface Env {
   OPENAI_API_KEY: string;
@@ -8,11 +9,16 @@ interface Env {
   MAX_REQUESTS: string;
   MAX_TOKEN_UNITS: string;
   REQUESTS_PER_MINUTE: string;
+  RUN_BUDGET_ID?: string;
+  RUN_BUDGET_MICRO_USD?: string;
   QUOTA: DurableObjectNamespace;
 }
 type Counter = { requests: number; units: number; minute: number; minuteRequests: number };
 const json = (detail: string, status: number, code?: string) =>
-  Response.json({ detail, ...(code ? { code } : {}) }, { status, headers: { 'Cache-Control': 'no-store' } });
+  Response.json(
+    { detail, ...(code ? { code } : {}) },
+    { status, headers: { 'Cache-Control': 'no-store' } },
+  );
 
 function positive(value: string, fallback: number) {
   const number = Number(value);
@@ -26,9 +32,40 @@ export class Quota {
   ) {}
 
   async fetch(request: Request): Promise<Response> {
-    const { units } = (await request.json()) as { units: number };
+    if (new URL(request.url).pathname === '/settle') {
+      const { id, actual } = (await request.json()) as { id: string; actual: number };
+      if (typeof id !== 'string' || !Number.isSafeInteger(actual) || actual < 0)
+        return json('Biaya tidak valid.', 400);
+      return this.state.storage.transaction(async (txn) => {
+        const lease = await txn.get<{ key: string; amount: number }>('cost-lease:' + id);
+        if (!lease) return json('Reservasi tidak ditemukan.', 409);
+        // Never refund an invalid/unexpected usage amount. Keep the conservative hold.
+        if (actual > lease.amount) return json('Biaya melebihi reservasi.', 409);
+        const spent = (await txn.get<number>(lease.key)) ?? 0;
+        await txn.put(lease.key, spent - lease.amount + actual);
+        await txn.delete('cost-lease:' + id);
+        return Response.json({ ok: true });
+      });
+    }
+    const { units, limits, budget, cost } = (await request.json()) as {
+      units: number;
+      limits?: { requests: number; units: number; minute: number };
+      budget?: { id: string; limit: number };
+      cost?: number;
+    };
     if (!Number.isSafeInteger(units) || units < 1 || units > 200000)
       return json('Reservasi tidak valid.', 400);
+    if (limits && Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1))
+      return json('Batas tidak valid.', 400);
+    if (
+      budget &&
+      (!/^[A-Za-z0-9_-]{1,64}$/.test(budget.id) ||
+        !Number.isSafeInteger(budget.limit) ||
+        budget.limit < 1 ||
+        !Number.isSafeInteger(cost) ||
+        cost! < 1)
+    )
+      return json('Anggaran tidak valid.', 400);
     return this.state.storage.transaction(async (txn) => {
       const minute = Math.floor(Date.now() / 60000);
       const counter = (await txn.get<Counter>('usage')) ?? {
@@ -42,18 +79,28 @@ export class Quota {
         counter.minuteRequests = 0;
       }
       if (
-        counter.requests >= positive(this.env.MAX_REQUESTS, 1000) ||
-        counter.units + units > positive(this.env.MAX_TOKEN_UNITS, 2000000)
+        counter.requests >= (limits?.requests ?? positive(this.env.MAX_REQUESTS, 1000)) ||
+        counter.units + units > (limits?.units ?? positive(this.env.MAX_TOKEN_UNITS, 2000000))
       ) {
         return json('Kuota total relay tidak mencukupi untuk permintaan ini.', 429, 'relay_budget');
       }
-      if (counter.minuteRequests >= positive(this.env.REQUESTS_PER_MINUTE, 30))
+      if (counter.minuteRequests >= (limits?.minute ?? positive(this.env.REQUESTS_PER_MINUTE, 30)))
         return json('Batas permintaan per menit tercapai.', 429, 'relay_rate');
+      let reservationId: string | undefined;
+      if (budget) {
+        const key = 'run-spend:' + budget.id;
+        const spent = (await txn.get<number>(key)) ?? 0;
+        if (spent + cost! > budget.limit)
+          return json('Batas biaya uji tercapai.', 429, 'relay_cost');
+        reservationId = crypto.randomUUID();
+        await txn.put(key, spent + cost!);
+        await txn.put('cost-lease:' + reservationId, { key, amount: cost! });
+      }
       counter.requests++;
       counter.units += units;
       counter.minuteRequests++;
       await txn.put('usage', counter);
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, reservationId });
     });
   }
 }
@@ -118,14 +165,46 @@ export default {
       return json('Payload tidak valid, terlalu besar, atau operasi tidak diizinkan.', 400);
     }
     const quota = env.QUOTA.get(env.QUOTA.idFromName('testing-budget-v1'));
+    const cost = reserveCost(prepared);
+    const budgetConfigured =
+      env.RUN_BUDGET_ID !== undefined || env.RUN_BUDGET_MICRO_USD !== undefined;
+    const budget = budgetConfigured
+      ? { id: env.RUN_BUDGET_ID ?? '', limit: Number(env.RUN_BUDGET_MICRO_USD) }
+      : undefined;
+    if (
+      budget &&
+      (!/^[A-Za-z0-9_-]{1,64}$/.test(budget.id) ||
+        !Number.isSafeInteger(budget.limit) ||
+        budget.limit < 1)
+    )
+      return json('Anggaran uji belum dikonfigurasi dengan benar.', 503);
     const reservation = await quota.fetch('https://quota/reserve', {
       method: 'POST',
-      body: JSON.stringify({ units: prepared.units }),
+      // Limits come only from this authenticated Worker's current bindings,
+      // never from a caller's payload or a cached constructor binding.
+      body: JSON.stringify({
+        units: prepared.units,
+        cost,
+        budget,
+        limits: {
+          requests: positive(env.MAX_REQUESTS, 1000),
+          units: positive(env.MAX_TOKEN_UNITS, 2000000),
+          minute: positive(env.REQUESTS_PER_MINUTE, 30),
+        },
+      }),
     });
     if (!reservation.ok) {
       const limit = (await reservation.json()) as { code?: string };
       return json('Batas penggunaan layanan AI tercapai.', 429, limit.code);
     }
+    const { reservationId } = (await reservation.json()) as { reservationId?: string };
+    const settle = async (actual: number) => {
+      if (reservationId)
+        await quota.fetch('https://quota/settle', {
+          method: 'POST',
+          body: JSON.stringify({ id: reservationId, actual }),
+        });
+    };
     try {
       const upstream = await fetch('https://api.openai.com/v1/' + prepared.upstream, {
         method: 'POST',
@@ -147,6 +226,16 @@ export default {
           upstream.status === 429 ? 'upstream_rate' : undefined,
         );
       }
+      if (reservationId && !prepared.streaming) {
+        const packet = await upstream.json();
+        const actual = actualCost(prepared, packet);
+        // Unknown billing/transport failures retain their full reservation.
+        if (actual !== null) await settle(actual);
+        return Response.json(packet, {
+          headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+        });
+      }
+      if (prepared.streaming) await settle(cost); // Streaming stays conservatively charged.
       // Forward the stream directly: no text()/json() on a streaming answer.
       return new Response(upstream.body, {
         status: 200,

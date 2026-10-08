@@ -27,12 +27,25 @@ function runtime(overrides = {}, observe = () => {}) {
             ...overrides,
           },
           outboundService: async (request) => {
-            observe(await request.clone().json());
+            const body = await request.clone().json();
+            const override = observe(body);
+            if (override instanceof Response) return override;
             if (request.url.endsWith('/embeddings')) {
               return Response.json({
                 data: [{ index: 0, embedding: [1, ...Array(1535).fill(0)] }],
+                usage: { prompt_tokens: 2, total_tokens: 2 },
               });
             }
+            if (body.response_format)
+              return Response.json({
+                choices: [
+                  {
+                    finish_reason: 'stop',
+                    message: { content: '{"text":"Fixture OCR","uncertain":false}' },
+                  },
+                ],
+                usage: { prompt_tokens: 1000, completion_tokens: 1000 },
+              });
             return new Response(
               'data: {"choices":[{"delta":{"content":"Jawaban [S1]"}}]}\n\ndata: [DONE]\n\n',
               {
@@ -127,7 +140,9 @@ test('stream body and fixed trusted instructions survive the Worker runtime', as
 
 test('Sol fragments require auth and consume the same persistent total quota', async () => {
   let sent;
-  const mf = runtime({ MAX_TOKEN_UNITS: '200000' }, (body) => { sent = body; });
+  const mf = runtime({ MAX_TOKEN_UNITS: '200000' }, (body) => {
+    sent = body;
+  });
   try {
     const image = 'data:image/jpeg;base64,YWJj';
     assert.equal((await post(mf, '/vision-fragment', { image }, 'wrong')).status, 401);
@@ -137,5 +152,77 @@ test('Sol fragments require auth and consume the same persistent total quota', a
     const blocked = await post(mf, '/vision-fragment', { image });
     assert.equal(blocked.status, 429);
     assert.equal((await blocked.json()).code, 'relay_budget');
-  } finally { await mf.dispose(); }
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test('server cost budget settles actual usage, rejects before upstream and cannot be overridden', async () => {
+  let calls = 0;
+  const mf = runtime(
+    { RUN_BUDGET_ID: 'bounded-run', RUN_BUDGET_MICRO_USD: '17000' },
+    () => calls++,
+  );
+  try {
+    const body = { image: 'data:image/jpeg;base64,YWJj' };
+    assert.equal(
+      (await post(mf, '/vision', { ...body, RUN_BUDGET_MICRO_USD: 999999 })).status,
+      400,
+    );
+    assert.equal((await post(mf, '/vision', body)).status, 200);
+    assert.equal((await post(mf, '/vision', body)).status, 200);
+    const blocked = await post(mf, '/vision', body);
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).code, 'relay_cost');
+    assert.equal(calls, 2);
+    const sol = await post(mf, '/vision-fragment', body);
+    assert.equal(sol.status, 429);
+    assert.equal((await sol.json()).code, 'relay_cost');
+    assert.equal(calls, 2);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test('server budget reservations are atomic and invalid budget fails closed', async () => {
+  const body = { image: 'data:image/jpeg;base64,YWJj' };
+  let calls = 0;
+  const mf = runtime(
+    { RUN_BUDGET_ID: 'concurrent-run', RUN_BUDGET_MICRO_USD: '15000' },
+    () => calls++,
+  );
+  try {
+    const responses = await Promise.all(Array.from({ length: 5 }, () => post(mf, '/vision', body)));
+    assert.equal(responses.filter((response) => response.status === 200).length, 1);
+    assert.equal(responses.filter((response) => response.status === 429).length, 4);
+    assert.equal(calls, 1);
+  } finally {
+    await mf.dispose();
+  }
+  const invalid = runtime({ RUN_BUDGET_ID: 'incomplete-run' }, () =>
+    assert.fail('Must fail before upstream'),
+  );
+  try {
+    assert.equal((await post(invalid, '/vision', body)).status, 503);
+  } finally {
+    await invalid.dispose();
+  }
+});
+
+test('upstream failures retain the conservative cost hold and cannot cause unlimited retries', async () => {
+  let calls = 0;
+  const mf = runtime({ RUN_BUDGET_ID: 'failed-upstream', RUN_BUDGET_MICRO_USD: '15000' }, () => {
+    calls++;
+    return new Response('Unavailable', { status: 503 });
+  });
+  try {
+    const body = { image: 'data:image/jpeg;base64,YWJj' };
+    assert.equal((await post(mf, '/vision', body)).status, 502);
+    const retry = await post(mf, '/vision', body);
+    assert.equal(retry.status, 429);
+    assert.equal((await retry.json()).code, 'relay_cost');
+    assert.equal(calls, 1);
+  } finally {
+    await mf.dispose();
+  }
 });

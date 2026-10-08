@@ -10,7 +10,7 @@ type Page = {
   confirmed: number;
   revision: number;
   required: number;
-  regions: { number: number; top: number; bottom: number; warning: string }[];
+  regions: { number: number; top: number; bottom: number; method: string; warning: string }[];
 };
 type Review = {
   version_id: string;
@@ -55,6 +55,7 @@ export function DocumentReview({
         ((dirty || busy) && page.number === number),
     ) ?? [];
   const selected = visiblePages.find((page) => page.number === number);
+  const solParts = selected?.regions?.filter((part) => part.method?.includes('5.6-sol')) ?? [];
   const ready = data?.status === 'review';
   const required = data?.pages.filter((page) => page.required).length ?? 0;
   const checked = data?.pages.filter((page) => page.required && page.confirmed).length ?? 0;
@@ -323,6 +324,13 @@ export function DocumentReview({
               · {text.length.toLocaleString('id-ID')} karakter
             </p>
             <p className="review-warning">{selected.warning}</p>
+            {!!solParts.length && (
+              <p className="review-warning">
+                Bagian {solParts.map((part) => part.number).join(', ')} sudah diperiksa dengan
+                GPT-5.6 Sol setelah GPT-4.1 mini, tetapi hasilnya belum lolos verifikasi. Cocokkan
+                bagian tersebut dengan gambar asli dan perbaiki bila diperlukan.
+              </p>
+            )}
             <label className="review-check">
               <input
                 type="checkbox"

@@ -17,6 +17,8 @@ def upstream_error(status, code=None):
     if status in (401, 403):
         return "Akses layanan AI belum aktif atau sudah berakhir. Silakan hubungi admin."
     if status == 429:
+        if code == "relay_cost":
+            return "Batas biaya uji layanan AI tercapai. Hasil pemrosesan yang sudah selesai tetap tersimpan."
         if code == "relay_budget":
             return "Kuota total relay tidak mencukupi untuk pemrosesan ini. Pemilik layanan perlu meninjau batas penggunaan."
         if code == "relay_rate":

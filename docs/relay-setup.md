@@ -29,10 +29,22 @@ Jika deployment awal gagal, skrip berhenti sebelum mengaktifkan akses. Jika pema
 | `MAX_REQUESTS` | 1000 | Total request yang direservasi sejak penghitung dibuat |
 | `MAX_TOKEN_UNITS` | 2000000 | Total unit reservasi konservatif sejak penghitung dibuat |
 | `REQUESTS_PER_MINUTE` | 30 | Batas seluruh pemegang token per menit |
+| `RUN_BUDGET_ID` | Tidak diset | ID anggaran uji yang tetap selama satu rangkaian pemakaian |
+| `RUN_BUDGET_MICRO_USD` | Tidak diset | Batas biaya berdasarkan tarif model, dalam mikro-USD; 500000 = US$0,50 |
 
 Unit reservasi bukan hitungan token tagihan atau batas dolar yang presisi. Teks menggunakan ukuran byte UTF-8 ditambah reservasi output; vision GPT-4.1 mini menggunakan 60000 unit per request, fallback potongan GPT-5.6 Sol menggunakan 200000. Request gagal setelah reservasi tetap mengurangi jatah. Penghitung disimpan pada Durable Object dan tidak direset hanya dengan redeploy atau mengganti tanggal/token. Periksa pula penggunaan pada akun OpenAI; batas proyek harus disesuaikan oleh pemilik akun.
 
 Biaya Cloudflare/OpenAI mengikuti akun pemilik. Vision untuk scan dapat menghabiskan kuota lebih cepat daripada chat sederhana. Nilai batas tersedia untuk diubah sebelum pemberian akses penguji.
+
+## Anggaran biaya uji di server
+
+Jika kedua variabel `RUN_BUDGET_*` diset, seluruh endpoint memakai anggaran bersama yang ditegakkan oleh Durable Object sebelum menghubungi OpenAI. Satu variabel saja atau nilai tidak valid membuat akses gagal tertutup. ID dan batas hanya berasal dari konfigurasi Worker, bukan payload klien. Anggaran unit/request/rate tetap diperiksa pada counter lama; menambahkan anggaran biaya tidak mereset atau menggantikan counter tersebut.
+
+Setiap permintaan memesan biaya konservatif terlebih dahulu. Respons vision/embedding yang lengkap dan memiliki usage valid mengembalikan selisih reservasi, memakai harga model di `src/cost.ts` (diperiksa 8 Oktober 2026). Completion token sudah mencakup reasoning; cached input dihitung sesuai tarifnya. Streaming chat tetap memesan estimasi konservatif penuh. Respons gagal, usage tidak tersedia, atau pemutusan koneksi menahan reservasi, sehingga retry tidak dapat melewati batas lewat kegagalan. ID yang sama mempertahankan pemakaian saat redeploy; jangan membuat ID baru untuk menghindari anggaran yang telah habis.
+
+Kode `relay_cost` menandakan sisa anggaran tidak cukup untuk reservasi satu permintaan, meski masih ada unit relay. Reservasi vision mini US$0,015 dan Sol US$0,15 sengaja lebih besar daripada biaya sampel; karena itu proses dapat berhenti sebelum total biaya aktual mencapai batas. Perhitungan ini memakai asumsi batas input gambar/model tetap serta tarif saat diperiksa, bukan janji tagihan kartu yang identik; pajak, perubahan harga, kurs, dan biaya Cloudflare tidak masuk. Tinjau harga sebelum mengubah model atau batas gambar/output.
+
+Batas unit terkini diteruskan dari handler Worker pada setiap reservasi internal agar perubahan binding tidak bergantung pada nilai lama yang tersimpan di konstruktor Durable Object. Endpoint reservasi/settlement hanya dapat diakses lewat binding internal; tidak ada route publik untuk mengatur biaya, mengganti batas, menghapus pemakaian, atau membaca secrets.
 
 ## Pencabutan dan rotasi
 

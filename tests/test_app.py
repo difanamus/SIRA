@@ -353,6 +353,7 @@ def test_automatic_review_requires_only_unresolved_page_and_preview_crop(harness
     review = client.get(base).json()
     assert [page["required"] for page in review["pages"]] == [0, 1, 0]
     assert len(review["pages"][1]["regions"]) == 1
+    assert review["pages"][1]["regions"][0]["method"] == "ocr-regions-v2"
     version = {"version_id": review["version_id"]}
     assert client.post(base + "/activate", json=version).status_code == 409
     full = client.get(base + "/pages/2/image", params=version)
