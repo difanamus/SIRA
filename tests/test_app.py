@@ -491,6 +491,37 @@ def test_missing_citation_is_not_labelled_complete(harness):
     assert events[-1]["type"] == "error" and "referensi" in events[-1]["message"]
 
 
+def test_named_greetings_finish_without_ai_or_citations_and_preserve_topic(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    sid = session(client)
+    ask(client, sid, "Apa persyaratan pendidikan SBP?")
+    embeddings, answers = ai.embeddings, len(ai.payloads)
+    topic = ctx.chat.get(sid).search_context
+    for greeting in ["halo sira", "Hai, SIRA!", "Sira, selamat pagi.", "terima kasih Sira", "halo"]:
+        events = ask(client, sid, greeting)
+        assert events[-1] == {"type": "done", "sources": []}
+        assert any("Saya SIRA" in event.get("text", "") for event in events)
+        assert not any(event["type"] in {"error", "reset_answer", "status"} for event in events)
+    assert ai.embeddings == embeddings and len(ai.payloads) == answers
+    assert ctx.chat.get(sid).questions == ["Apa persyaratan pendidikan SBP?"]
+    assert ctx.chat.get(sid).search_context == topic
+
+
+def test_greeting_with_document_question_still_requires_citations(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def unsupported(payload):
+        yield "Semua peserta pasti lulus."
+
+    ai.answer = unsupported
+    before = ai.embeddings
+    result = ask(client, session(client), "Halo Sira, apa persyaratan pendidikan SBP?")
+    assert ai.embeddings == before + 1
+    assert result[-1]["type"] == "error" and "referensi" in result[-1]["message"]
+
+
 def test_missing_citation_retries_once_and_replaces_unverified_draft(harness):
     client, ctx, ai, _ = harness
     wait_document(ctx, upload(client))

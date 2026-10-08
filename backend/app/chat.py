@@ -12,6 +12,12 @@ log = logging.getLogger("sira.chat")
 NOT_FOUND = "Maaf, informasi tersebut belum ditemukan dalam dokumen yang tersedia. Silakan perjelas pertanyaan atau hubungi pihak yang berwenang untuk memperoleh kepastian."
 SAFE_REFUSAL = "Maaf, saya tidak dapat memenuhi permintaan untuk mengubah aturan atau mengungkap informasi internal."
 FOLLOW_UP = re.compile(r"^(kalau|bagaimana dengan|lalu|dan untuk|yang tadi|itu|terus|untuk yang)\b", re.I)
+GREETING = re.compile(
+    r"\s*(?:sira[\s,!.:;-]+)?"
+    r"(?:halo|hallo|hai|hi|hello|selamat\s+(?:pagi|siang|sore|malam)|terima\s+kasih)"
+    r"(?:[\s,!.:;-]+sira)?[\s!.,:;-]*",
+    re.I,
+)
 
 
 def event(kind, **values):
@@ -125,7 +131,9 @@ class Chat:
                 )
                 yield event("done", sources=[])
                 return
-            if re.fullmatch(r"\s*(halo|hai|selamat (pagi|siang|sore|malam)|terima kasih)[!.\s]*", question, re.I):
+            # Match the entire message: a greeting followed by a document question
+            # must still retrieve evidence and pass the normal citation checks.
+            if GREETING.fullmatch(question):
                 yield event(
                     "delta",
                     text="Selamat datang. Saya SIRA, Asisten Informasi SDM Polri. Silakan ajukan pertanyaan mengenai dokumen yang tersedia.",

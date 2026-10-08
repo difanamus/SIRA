@@ -102,6 +102,7 @@ Aturan penggunaan:
 - [x] Menampilkan streaming dan menandai respons yang terputus sebagai belum selesai.
 - [x] Mereset konteks pada percakapan baru/refresh/buka ulang, dengan cleanup bila ada state backend.
 - [x] Memastikan sapaan serta pemberitahuan KB kosong tidak memanggil AI.
+- [x] Memperbaiki sapaan dengan nama SIRA agar tidak memunculkan peringatan referensi; pesan sapaan yang disertai pertanyaan dokumen tetap wajib sumber. Tes regresi dan browser desktop/mobile lulus.
 
 ## 6. Lifecycle dokumen dan persistensi
 

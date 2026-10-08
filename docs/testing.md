@@ -124,3 +124,11 @@ Build TypeScript/Vite lulus. Browser nyata pada fixture terpisah 12 halaman (dua
 ## Penerapan nyata pipeline pada SBP
 
 Setelah izin pengguna, run persisten memakai ulang empat halaman AI yang lolos dan memproses halaman 5–12. Sebanyak 86 request GPT-4.1 mini + 5 Sol selesai, estimasi US$0,1141628; Sol terpicu otomatis pada perbedaan nyata. Sepuluh halaman lolos, halaman 10 dan 12 masih wajib review; SBP belum aktif. Rincian biaya, temuan halusinasi pada crop hampir kosong yang berhasil ditahan, batas anggaran server, hasil verifikasi, serta izin kuota lanjutan ada di [sbp-live-ocr.md](sbp-live-ocr.md).
+
+## Sapaan tanpa peringatan referensi — 8 Oktober 2026
+
+Sapaan dengan nama seperti “halo sira” sebelumnya tidak cocok dengan pola sapaan lokal, sehingga dikirim ke RAG dan jawaban sapaan tanpa sumber ditolak pemeriksa referensi. Pola kini menerima nama SIRA sebelum/setelah sapaan serta tanda baca umum, dengan pencocokan seluruh pesan. Pesan gabungan seperti “Halo Sira, apa persyaratan pendidikan SBP?” tetap diproses sebagai pertanyaan dokumen dan tidak dibebaskan dari pemeriksaan sumber.
+
+Empat tes regresi sapaan/referensi lulus dengan AI palsu, termasuk tidak ada panggilan embedding/jawaban pada sapaan, konteks topik sebelumnya tetap utuh, jawaban faktual tanpa sumber tetap ditolak, dan retry referensi tetap berjalan. Ruff lulus. Run awal di sandbox tidak selesai dan dihentikan; rerun runtime lokal lulus, dengan satu peringatan deprecation TestClient/httpx yang sudah ada.
+
+Backend utama direstart saat dua dokumen berstatus siap. Browser desktop 1440×1000 dan mobile 390×844 menampilkan balasan lokal “Saya SIRA” untuk “halo sira”, tanpa peringatan, referensi palsu, atau error JavaScript. Screenshot lokal di `tmp/greeting-ui/` diabaikan Git. Tidak ada panggilan OpenAI pada verifikasi sapaan ini.
