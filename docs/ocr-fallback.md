@@ -18,11 +18,11 @@ Tombol **Baca dengan AI** memaksa pemeriksaan mini pada semua potongan nonkosong
 
 Tarif resmi saat diperiksa: GPT-4.1 mini input US$0,40/output US$1,60 per juta token; GPT-5.6 Sol input US$4/output US$20. Karena Sol lebih mahal, hanya crop bermasalah yang dikirim. Respons API, reasoning, resolusi, retry, dan panjang teks memengaruhi biaya. Tidak ada jaminan akurasi 100% ataupun batas biaya dolar dari mekanisme reservasi relay.
 
-Permintaan mini menggunakan 60.000 unit reservasi internal, Sol 200.000. Kuota total tetap menggunakan Durable Object yang sama; tidak direset atau dilewati dengan counter benchmark. Batas relay 2 juta unit dan masa berlaku belum dinaikkan oleh perubahan ini. Pengujian AI nyata dan kelanjutan SBP memerlukan kuota yang memadai.
+Permintaan mini menggunakan 60.000 unit reservasi internal, Sol 200.000. Kuota total tetap menggunakan Durable Object yang sama; tidak direset atau dilewati dengan counter benchmark. Untuk uji berbayar terbatas yang disetujui pengguna, batas dinaikkan sementara dari 2 juta ke 2,4 juta unit, kemudian dipulihkan ke 2 juta setelah tiga request. Masa berlaku tetap sama. Kelanjutan SBP memerlukan kuota yang memadai.
 
 ## Verifikasi
 
-Tes offline memakai respons tiruan untuk memeriksa jalur model, crop terbatas, penggabungan teks, penghentian saat kuota gagal, resume, batas Sol, review selektif, autentikasi, dan aktivasi atomik. Preflight lokal 12 halaman SBP berhasil membentuk potongan; crop terbesar sekitar 20,76% tinggi halaman. Crop contoh halaman 3 dan tabel jadwal halaman 11 diperiksa secara visual. Ini belum membuktikan akurasi transkripsi Sol nyata; evaluasi OpenAI berbayar dicatat terpisah di docs/testing.md.
+Tes offline memakai respons tiruan untuk memeriksa jalur model, crop terbatas, penggabungan teks, penghentian saat kuota gagal, resume, batas Sol, review selektif, autentikasi, dan aktivasi atomik. Preflight lokal 12 halaman SBP berhasil membentuk potongan; crop terbesar sekitar 20,76% tinggi halaman. Crop contoh halaman 3 dan tabel jadwal halaman 11 diperiksa secara visual. Uji nyata tiga request pada satu crop halaman 3 berhasil membaca angka/tanggal/semester yang diperiksa, total estimasi US$0,0098264. Dua mini sudah sepakat, sehingga Sol berperan sebagai pembanding diagnostik; ini belum membuktikan perbaikan pada eskalasi otomatis atau akurasi seluruh dokumen. Detail di [testing.md](testing.md).
 
 Deteksi tabel berbasis garis adalah heuristik. Tabel tanpa garis, tata letak beberapa kolom, tulisan tangan, stempel menutupi teks, dan pembacaan salah yang disepakati beberapa model tetap dapat membutuhkan review manusia.
 

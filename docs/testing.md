@@ -95,3 +95,22 @@ Perubahan berikutnya pada 8 Oktober 2026 menggantikan kewajiban konfirmasi selur
 - Build TypeScript/Vite berhasil. Browser nyata desktop 1440×1100 dan mobile 390×844 pada fixture terpisah: hanya 1 dari 12 halaman wajib review; crop 442 piksel dari halaman 2400 piksel; koreksi tersimpan setelah refresh; polling tidak menghapus draft; setelah satu halaman dikonfirmasi tombol indeks tersedia tanpa konfirmasi 11 halaman otomatis. Tidak ada error JavaScript atau overflow horizontal. Fixture tidak diaktifkan atau dicampurkan ke KB demo; tidak ada request OpenAI.
 - Instalasi utama direstart dan diperiksa melalui browser: admin/health normal, satu dokumen aktif (Perpol), SBP tetap menunggu review. Migrasi mempertahankan draft manual, melepas kewajiban konfirmasi tiga draft AI yang cocok dengan cache. Tampilan kini **0/9 halaman wajib review**; angka ini bukan klaim sembilan halaman salah, melainkan sembilan belum dikonfirmasi/lolos. Tidak ada konfirmasi manusia yang dipalsukan.
 - Worker versi **82503cf1-fb04-4902-aafb-8f9b54fefe40** dideploy dengan batas 2 juta unit dan expiry lama. Smoke `/vision-fragment`: tanpa token **401**, dengan token **429 relay_budget**. Permintaan berhenti sebelum OpenAI; **belum ada hasil GPT-5.6 Sol nyata**. Kuota tidak dinaikkan atau dilewati memakai counter lain. Akurasi pipeline baru dan kelanjutan ingestion SBP masih menunggu kuota yang memadai dan evaluasi berbayar.
+
+## Uji berbayar terbatas setelah persetujuan pengguna
+
+Pada 8 Oktober 2026 pengguna mengizinkan uji berbayar dengan pemakaian kecil. Uji berhenti setelah **tepat tiga request OpenAI**, tanpa retry otomatis: dua GPT-4.1 mini dan satu GPT-5.6 Sol. Semua melalui relay Cloudflare dan kuota Durable Object yang sama. Batas sementara 2,4 juta unit dipulihkan ke **2 juta** dengan rollback ke `82503cf1-fb04-4902-aafb-8f9b54fefe40`; counter pemakaian tidak direset, expiry/secret tidak diubah. Konfigurasi versi hasil pemulihan diperiksa melalui Wrangler.
+
+Sampel adalah crop pertama PDF SBP halaman 3, sebesar **16,77% tinggi halaman**, yang memuat nomor pengumuman, tanggal tulisan tangan, serta semester. Tesseract lokal menghasilkan confidence rata-rata 90,47. Mini pertama menerima gambar yang diproses lokal, mini kedua gambar asli; Sol hanya menerima crop asli, tanpa hasil OCR sebelumnya. Respons lengkap dan usage disimpan pada direktori lokal yang diabaikan Git, `tmp/paid-sol-test/`; teks sumber tidak ditambahkan ke Git.
+
+| Panggilan | Input / output token | Waktu | Estimasi biaya API |
+| --- | --- | --- | --- |
+| GPT-4.1 mini, diproses | 1.487 / 112 | 4,116 detik | US$0,0007740 |
+| GPT-4.1 mini, asli | 1.487 / 111 | 2,293 detik | US$0,0007724 |
+| GPT-5.6 Sol, asli | 1.195 / 175 | 4,216 detik | US$0,0082800 |
+| Total | 4.169 / 398 | 10,625 detik tiga request berurutan | **US$0,0098264** |
+
+Semua respons HTTP 200, finish reason `stop`, JSON valid, `uncertain=false`; cached input 0. Output Sol mencakup 43 token reasoning, sudah masuk perhitungan. Biaya dihitung dari usage respons dan tarif standar yang diperiksa pada [GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) serta [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol). Sekitar **Rp167** dengan asumsi ilustrasi Rp17.000/US$, bukan kurs kartu terverifikasi; belum termasuk pajak/biaya lain. Waktu adalah request relay sampai respons lengkap, bukan waktu chat ataupun ingestion seluruh halaman.
+
+Pemeriksaan visual crop asli: ketiga hasil mempertahankan nomor **23**, tanggal **14 September 2026**, **SMT II T.A. 2025**, dan **SMT I T.A. 2026**. Dua mini sepakat menurut pemeriksa `fragments_agree`, Sol sesuai keduanya. Ada variasi tanda baca/format baris; hasil ini tidak membuktikan transkripsi identik setiap karakter atau akurasi umum.
+
+**Sol dipanggil sebagai pembanding diagnostik yang disengaja**, karena mini sudah sepakat. Uji ini membuktikan akses model nyata, payload crop, format respons, latency, dan biaya sampel; belum membuktikan Sol memperbaiki kasus yang benar-benar gagal pada mini. Tidak ada request tambahan, embedding, aktivasi dokumen, atau konfirmasi review manusia otomatis. SBP tetap belum aktif; pengujian seluruh scan dan eskalasi otomatis pada perbedaan nyata masih belum selesai.
