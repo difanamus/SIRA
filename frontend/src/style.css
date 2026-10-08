@@ -1380,6 +1380,128 @@ textarea::placeholder {
   .edit-form input {
     flex-basis: 100%;
   }
+  /* Keep mobile chat in the viewport with one compact conversation header. */
+  .shell:has(.chat-page) {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+  }
+  .shell:has(.chat-page) .sidebar {
+    flex: 0 0 auto;
+    padding: 4px 12px;
+  }
+  .shell:has(.chat-page) .sidebar .brand,
+  .shell:has(.chat-page) .topbar {
+    display: none;
+  }
+  .shell:has(.chat-page) .sidebar nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .shell:has(.chat-page) .nav-link {
+    min-height: 44px;
+    margin: 0;
+    padding: 8px 10px;
+  }
+  .shell:has(.chat-page) .main,
+  .chat-page,
+  .chat-page .chat-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .shell:has(.chat-page) .main > .alert,
+  .chat-page > .alert {
+    flex-shrink: 0;
+  }
+  .chat-page {
+    position: relative;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+  .chat-page .page-heading {
+    position: absolute;
+    z-index: 1;
+    top: 10px;
+    right: 12px;
+    margin: 0;
+  }
+  .chat-page .page-heading > div,
+  .chat-page > .page-footnote {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .chat-page .page-heading .button {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  .chat-page:has(> .alert) .page-heading {
+    position: static;
+    align-self: flex-end;
+    margin: 10px 12px;
+  }
+  .chat-page .chat-card {
+    flex: 1;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .chat-page .chat-card-header {
+    position: relative;
+    flex: 0 0 64px;
+    padding: 12px 150px 12px 12px;
+    align-items: flex-start;
+  }
+  .chat-page .assistant-label small {
+    display: none;
+  }
+  .chat-page .chat-card-header .subtle-tag {
+    position: absolute;
+    left: 54px;
+    bottom: 10px;
+    padding: 0;
+    border: 0;
+  }
+  .chat-page .messages {
+    min-height: 0;
+    overscroll-behavior-y: contain;
+    padding: 16px 12px;
+  }
+  .chat-page .message-text {
+    font-size: 13px;
+  }
+  .chat-page .composer {
+    flex-shrink: 0;
+    padding: 10px 12px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .chat-page .composer textarea {
+    font-size: 16px;
+    height: 44px;
+  }
+  .chat-page .composer-field {
+    padding: 6px 8px 6px 12px;
+  }
+  .chat-page .send-button {
+    width: 44px;
+    height: 44px;
+  }
 }
 .header-actions {
   display: flex;

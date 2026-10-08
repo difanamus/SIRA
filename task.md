@@ -167,6 +167,8 @@ Aturan penggunaan:
 
 ## Catatan progres
 
+- 9 Oktober 2026: merapikan UI chat khusus mobile melalui CSS saja. Header berulang diringkas, tombol Percakapan baru ditempatkan pada header SIRA, area pesan mengikuti tinggi viewport dinamis, dan input tetap terlihat. Verifikasi browser pada 320×568, 390×650, 430×844, landscape 720×390, serta desktop 1440×1000 lulus tanpa overflow horizontal/error JavaScript. Pada 390×650 area pesan bertambah dari sekitar 293 menjadi 434 piksel; layout desktop cocok dengan ukuran sebelum perubahan. Tombol chat baru dan navigasi admin diuji memakai fixture tanpa biaya AI. Build frontend, Prettier, dan diff check lulus; tidak ada perubahan logika aplikasi.
+
 - 8 Oktober 2026: perencanaan, implementation plan, Git mandiri, `.gitignore`, dan checklist selesai. Repository berada pada branch `codex/setup`. Folder `/RAG SSDM/` dikecualikan melalui `.git/info/exclude` repository induk; tidak ada perubahan pada file proyek atau index induk. PDF sumber, data runtime, dan secrets tidak dilacak. Implementasi sudah diizinkan pengguna dan dilanjutkan.
 
 - 8 Oktober 2026: backend, UI, relay, OCR, lifecycle dokumen, dan dokumentasi tersedia. Tes lokal terbaru: 22 backend + 1 live opt-in, 4 policy Worker, dan 4 runtime Worker lulus. Relay berhasil dideploy, secret dimasukkan pengguna melalui terminal, embedding serta jawaban GPT nyata berhasil. Perpol 71 halaman/90 chunk siap, ingestion sekitar 15 detik. Scan SBP sedang diperiksa; jangan menyatakan akurasi/ingestion scan selesai sebelum lolos dan diverifikasi.
