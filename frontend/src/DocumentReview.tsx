@@ -31,6 +31,7 @@ export function DocumentReview({
   onIndexed: () => void;
 }) {
   const [data, setData] = useState<Review | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [number, setNumber] = useState(1);
   const [text, setText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -46,7 +47,14 @@ export function DocumentReview({
   const editor = useRef<HTMLTextAreaElement>(null);
   const preview = useRef<HTMLDivElement>(null);
   const base = '/admin/documents/' + doc.id + '/review';
-  const selected = data?.pages.find((page) => page.number === number);
+  const visiblePages =
+    data?.pages.filter(
+      (page) =>
+        showAll ||
+        (page.required && !page.confirmed) ||
+        ((dirty || busy) && page.number === number),
+    ) ?? [];
+  const selected = visiblePages.find((page) => page.number === number);
   const ready = data?.status === 'review';
   const required = data?.pages.filter((page) => page.required).length ?? 0;
   const checked = data?.pages.filter((page) => page.required && page.confirmed).length ?? 0;
@@ -70,6 +78,12 @@ export function DocumentReview({
       clearInterval(id);
     };
   }, [base]);
+
+  useEffect(() => {
+    if (!busy && !dirty && !selected && visiblePages.length) {
+      setNumber(visiblePages[0].number);
+    }
+  }, [busy, dirty, selected, visiblePages]);
 
   useEffect(() => {
     if (dirty) return;
@@ -153,7 +167,9 @@ export function DocumentReview({
         <p>
           Cocokkan teks dengan gambar asli, perbaiki angka, tanggal, periode, negasi, dan hubungan
           kolom tabel pada bagian yang ditandai. Halaman yang sudah lolos otomatis tidak wajib
-          dikonfirmasi ulang. Dokumen belum digunakan untuk chat.
+          dikonfirmasi ulang. Secara awal hanya halaman yang masih memerlukan review ditampilkan.
+          Pilih Review seluruh halaman untuk pemeriksaan lengkap. Dokumen belum digunakan untuk
+          chat.
         </p>
         <p>
           <strong>
@@ -174,24 +190,54 @@ export function DocumentReview({
         )}
         {notice && <p role="status">{notice}</p>}
       </div>
+      <div className="review-pages" role="group" aria-label="Cakupan review">
+        <button
+          className={'button secondary compact' + (!showAll ? ' current' : '')}
+          aria-pressed={!showAll}
+          disabled={busy || dirty}
+          onClick={() => setShowAll(false)}
+        >
+          Hanya halaman perlu review
+        </button>
+        <button
+          className={'button secondary compact' + (showAll ? ' current' : '')}
+          aria-pressed={showAll}
+          disabled={busy || dirty}
+          onClick={() => setShowAll(true)}
+        >
+          Review seluruh halaman
+        </button>
+      </div>
+      {data && (
+        <p className="document-meta review-summary">
+          Menampilkan {visiblePages.length} dari {data.page_count} halaman
+          {showAll ? '.' : ' yang masih memerlukan review.'}
+        </p>
+      )}
       <nav className="review-pages" aria-label="Pilih halaman review">
-        {Array.from({ length: data?.page_count || doc.page_count }, (_, i) => i + 1).map((n) => (
+        {visiblePages.map((page) => (
           <button
-            key={n}
-            className={'button secondary compact' + (n === number ? ' current' : '')}
-            disabled={busy || dirty || !data?.pages.some((page) => page.number === n)}
+            key={page.number}
+            className={'button secondary compact' + (page.number === number ? ' current' : '')}
+            disabled={busy || dirty}
             onClick={() => {
-              setNumber(n);
+              setNumber(page.number);
               setNotice('');
               setError('');
             }}
-            aria-current={n === number ? 'page' : undefined}
+            aria-current={page.number === number ? 'page' : undefined}
           >
-            {data?.pages.find((page) => page.number === n)?.confirmed || data?.pages.find((page) => page.number === n)?.required === 0 ? '✓ ' : '! '}
-            {n}
+            {page.confirmed || !page.required ? '✓ ' : '! '}
+            {page.number}
           </button>
         ))}
       </nav>
+      {ready && !showAll && !visiblePages.length && (
+        <p role="status">
+          Semua halaman yang memerlukan review sudah dikonfirmasi. Anda dapat membuat indeks atau
+          memilih Review seluruh halaman untuk memeriksa kembali dokumen.
+        </p>
+      )}
       {selected && data && (
         <div className="review-columns">
           <div>
@@ -203,10 +249,18 @@ export function DocumentReview({
             </div>
             {!!selected.regions?.length && (
               <nav className="review-pages" aria-label="Bagian yang perlu diperiksa">
-                <button className="button secondary compact" onClick={() => setRegion(null)}>Seluruh halaman</button>
+                <button className="button secondary compact" onClick={() => setRegion(null)}>
+                  Seluruh halaman
+                </button>
                 {selected.regions.map((part) => (
-                  <button key={part.number} className="button secondary compact" aria-pressed={region === part.number} onClick={() => setRegion(part.number)}>
-                    Bagian {part.number} ({Math.round(part.top * 100)}–{Math.round(part.bottom * 100)}%)
+                  <button
+                    key={part.number}
+                    className="button secondary compact"
+                    aria-pressed={region === part.number}
+                    onClick={() => setRegion(part.number)}
+                  >
+                    Bagian {part.number} ({Math.round(part.top * 100)}–
+                    {Math.round(part.bottom * 100)}%)
                   </button>
                 ))}
               </nav>
@@ -214,7 +268,15 @@ export function DocumentReview({
             <div className={'review-image' + (region === null ? '' : ' fragment')} ref={preview}>
               <img
                 className={zoom ? 'zoomed' : ''}
-                src={'/api' + base + '/pages/' + number + '/image?version_id=' + data.version_id + (region === null ? '' : '&region=' + region)}
+                src={
+                  '/api' +
+                  base +
+                  '/pages/' +
+                  number +
+                  '/image?version_id=' +
+                  data.version_id +
+                  (region === null ? '' : '&region=' + region)
+                }
                 alt={'Halaman asli ' + number + ' untuk dicocokkan dengan teks'}
               />
             </div>
@@ -245,19 +307,19 @@ export function DocumentReview({
                 ? 'Koreksi admin'
                 : selected.method === 'ocr-regions-draft'
                   ? 'Draft OCR bertahap; perlu review'
-                : selected.method.includes('5.6-sol')
-                  ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'
-                : selected.method.includes('4.1')
-                  ? 'GPT-4.1 mini'
-                  : selected.method.includes('vision')
-                    ? 'OCR dan AI'
-                    : selected.method.startsWith('ocr')
-                      ? 'OCR lokal'
-                      : selected.method === 'text'
-                        ? 'PDF teks'
-                        : selected.method === 'blank'
-                          ? 'Halaman kosong'
-                          : 'Perlu diisi manual'}{' '}
+                  : selected.method.includes('5.6-sol')
+                    ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'
+                    : selected.method.includes('4.1')
+                      ? 'GPT-4.1 mini'
+                      : selected.method.includes('vision')
+                        ? 'OCR dan AI'
+                        : selected.method.startsWith('ocr')
+                          ? 'OCR lokal'
+                          : selected.method === 'text'
+                            ? 'PDF teks'
+                            : selected.method === 'blank'
+                              ? 'Halaman kosong'
+                              : 'Perlu diisi manual'}{' '}
               · {text.length.toLocaleString('id-ID')} karakter
             </p>
             <p className="review-warning">{selected.warning}</p>
@@ -316,13 +378,20 @@ export function DocumentReview({
       )}
       <div className="review-footer">
         <p>
-          Setelah halaman yang perlu review dikonfirmasi, buat indeks dari teks yang sudah diperiksa. Langkah
-          ini memakai embedding OpenAI berbiaya kecil, tanpa membaca scan dengan AI lagi. Versi lama
-          tetap aktif sampai indeks baru berhasil.
+          Setelah halaman yang perlu review dikonfirmasi, buat indeks dari teks yang sudah
+          diperiksa. Langkah ini memakai embedding OpenAI berbiaya kecil, tanpa membaca scan dengan
+          AI lagi. Versi lama tetap aktif sampai indeks baru berhasil.
         </p>
         <button
           className="button primary"
-          disabled={!ready || busy || dirty || !data?.page_count || data.pages.length !== data.page_count || checked !== required}
+          disabled={
+            !ready ||
+            busy ||
+            dirty ||
+            !data?.page_count ||
+            data.pages.length !== data.page_count ||
+            checked !== required
+          }
           onClick={index}
         >
           Buat indeks dari hasil review

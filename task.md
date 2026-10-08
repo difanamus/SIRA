@@ -78,6 +78,7 @@ Aturan penggunaan:
 - [x] Menerapkan OCR lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada crop yang masih meragukan, maksimum dua crop per halaman, dengan penyimpanan hasil tiap tahap dan penghentian saat kuota/jaringan gagal.
 - [x] Menjaga batas crop pada sela baris dan garis penuh tabel agar sel gabungan tidak terpisah; preflight lokal 12 halaman SBP berhasil.
 - [x] Menampilkan lokasi/crop bagian bermasalah dan mewajibkan konfirmasi hanya pada halaman yang belum lolos atau diedit admin.
+- [x] Menampilkan hanya halaman wajib review yang belum dikonfirmasi secara default, berpindah otomatis setelah konfirmasi, serta menyediakan opsi **Review seluruh halaman**.
 - [x] Memverifikasi endpoint crop GPT-5.6 Sol dengan OpenAI nyata melalui uji berbayar terbatas tiga request; evaluasi eskalasi otomatis pada scan yang benar-benar berbeda masih bagian pengujian SBP berikutnya.
 - [ ] Memverifikasi hasil 12 halaman scan terhadap sumber, terutama angka, pangkat, pendidikan, tanggal, dan negasi.
 - [x] Menampilkan keterangan akurasi OCR serta rencana pratinjau/koreksi manual secara jelas di admin.

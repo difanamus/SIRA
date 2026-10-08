@@ -1416,6 +1416,9 @@ textarea::placeholder {
   border-color: #b38a48;
   background: #faf5eb;
 }
+.review-summary {
+  padding: 0 24px;
+}
 .review-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
