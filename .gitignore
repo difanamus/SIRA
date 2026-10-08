@@ -1,0 +1,78 @@
+# Secrets and local configuration. Templates with placeholder values may be tracked.
+.env
+.env.*
+!.env.example
+!.env.*.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+!.dev.vars.*.example
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Source documents and generated PDFs stay local.
+# Add a verified synthetic PDF fixture explicitly with git add -f when needed.
+*.[pP][dD][fF]
+
+# Persistent knowledge base, uploads, OCR artifacts, and local databases.
+/data/
+/uploads/
+/tmp/
+/temp/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-*
+
+# Python environments, bytecode, caches, and packaging outputs.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# JavaScript dependencies, builds, and local Worker state.
+node_modules/
+dist/
+build/
+.vite/
+.wrangler/
+*.tsbuildinfo
+.pnpm-store/
+
+# Test reports, coverage, logs, and disposable output.
+coverage/
+.coverage
+.coverage.*
+htmlcov/
+test-results/
+playwright-report/
+*.log
+/logs/
+/output/
+/artifacts/
+
+# Editor and operating-system files.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Keep dependency manifests and lockfiles tracked for reproducible installation.
