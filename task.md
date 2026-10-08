@@ -74,6 +74,7 @@ Aturan penggunaan:
 - [x] Menentukan sinyal bantuan AI tanpa menganggap confidence sebagai jaminan kebenaran.
 - [x] Mengintegrasikan bantuan vision selektif dengan transkripsi setia sumber dan penandaan bagian tidak terbaca.
 - [x] Menangani halaman kritis yang belum terbaca tanpa mengaktifkan versi tidak lengkap secara diam-diam.
+- [x] Menambahkan tombol admin **Baca dengan AI** (GPT-4.1 mini khusus scan), dua pembacaan terpisah, mode persisten, dan cache sesuai metode; model chat tetap GPT-4o mini.
 - [ ] Memverifikasi hasil 12 halaman scan terhadap sumber, terutama angka, pangkat, pendidikan, tanggal, dan negasi.
 - [x] Menampilkan keterangan akurasi OCR serta rencana pratinjau/koreksi manual secara jelas di admin.
 - [ ] Menyelesaikan ingestion pengumuman SBP dan memeriksa metadata halaman.
@@ -155,3 +156,5 @@ Aturan penggunaan:
 - 8 Oktober 2026: backend, UI, relay, OCR, lifecycle dokumen, dan dokumentasi tersedia. Tes lokal terbaru: 22 backend + 1 live opt-in, 4 policy Worker, dan 4 runtime Worker lulus. Relay berhasil dideploy, secret dimasukkan pengguna melalui terminal, embedding serta jawaban GPT nyata berhasil. Perpol 71 halaman/90 chunk siap, ingestion sekitar 15 detik. Scan SBP sedang diperiksa; jangan menyatakan akurasi/ingestion scan selesai sebelum lolos dan diverifikasi.
 
 - 8 Oktober 2026: evaluasi GPT nyata dengan PDF sintetis injeksi, serangan multi-turn, follow-up, dan konflik dua sumber lulus. Pengulangan jawaban tanpa referensi dibatasi satu kali; draft diganti sebelum hasil dinyatakan selesai. Scan SBP masih ditahan pada halaman 3; pilihan model OCR tambahan menunggu pengguna, tanpa perubahan pada model chat.
+- 8 Oktober 2026: pengguna menyetujui pembacaan AI untuk scan gagal. Tombol **Baca dengan AI** tersedia; 25 tes backend dan 5 policy + 4 runtime Worker lulus. GPT-4.1 mini hanya untuk mode OCR tersebut, tanpa mengubah model chat, kuota, atau masa aktif relay.
+- 8 Oktober 2026: tombol diuji melalui browser desktop/mobile. GPT-4.1 mini menerima scan halaman 1–4; halaman 3 sudah membaca periode semester dengan benar. Halaman 5 tertahan kuota total relay 2 juta unit, bukan perbedaan OCR. Cache empat halaman berhasil dipakai saat resume. Kenaikan kuota ke 4 juta menunggu persetujuan pengguna. Tes terbaru: 26 backend, 5 policy Worker, 5 runtime Worker lulus; 1 tes live opt-in dilewati.

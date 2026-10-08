@@ -278,6 +278,15 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
 
     @app.post("/api/admin/documents/{document_id}/retry", tags=["Dokumen"], dependencies=[Depends(require_admin)])
     def retry_document(document_id: str, request: Request):
+        return retry_processing(document_id, request)
+
+    @app.post("/api/admin/documents/{document_id}/read-ai", tags=["Dokumen"], dependencies=[Depends(require_admin)])
+    def read_document_with_ai(document_id: str, request: Request):
+        if not settings.ai_ready:
+            raise HTTPException(503, "Layanan AI belum dikonfigurasi.")
+        return retry_processing(document_id, request, enhanced=True)
+
+    def retry_processing(document_id, request, enhanced=False):
         ctx = request.app.state.ctx
         with ctx.mutation_lock:
             doc = ctx.db.one("SELECT pending_version FROM documents WHERE id=? AND deleted=0", (document_id,))
@@ -287,7 +296,13 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
             if ctx.ingestion.jobs.qsize() >= 5:
                 raise HTTPException(429, "Antrean pemrosesan penuh.")
             ctx.ingestion.update(
-                version["id"], status="processing", stage="Menunggu antrean", progress=0, error="", warning=""
+                version["id"],
+                status="processing",
+                stage="Menunggu pembacaan AI" if enhanced else "Menunggu antrean",
+                progress=0,
+                error="",
+                warning="",
+                ocr_mode="ai" if enhanced else version["ocr_mode"],
             )
             ctx.ingestion.enqueue(version["id"])
         return {"ok": True}

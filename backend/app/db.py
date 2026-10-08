@@ -23,6 +23,10 @@ class Database:
         self.path = directory / "app.sqlite3"
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(versions)")}
+            if "ocr_mode" not in columns:
+                conn.execute("ALTER TABLE versions ADD COLUMN ocr_mode TEXT NOT NULL DEFAULT 'auto'")
+            conn.execute("UPDATE meta SET value=2 WHERE key='schema_version'")
 
     @contextmanager
     def connect(self):
@@ -68,7 +72,7 @@ class Database:
 
     def document_list(self):
         return self.rows("""SELECT d.id,d.title,d.filename,d.active_version,d.pending_version,d.created,
-            v.status,v.stage,v.progress,v.page_count,v.warning,v.error,v.size,
+            v.status,v.stage,v.progress,v.page_count,v.warning,v.error,v.size,v.ocr_mode,
             CASE WHEN d.active_version IS NOT NULL THEN 1 ELSE 0 END AS available
             FROM documents d LEFT JOIN versions v ON v.id=COALESCE(d.pending_version,d.active_version)
             WHERE d.deleted=0 ORDER BY d.created DESC""")

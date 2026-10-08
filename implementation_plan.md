@@ -321,6 +321,7 @@ Tidak ada keputusan produk yang menghalangi penyusunan rencana atau tahap fondas
 - Chroma PersistentClient: https://docs.trychroma.com/reference/python/client
 - Tesseract dan kualitas OCR: https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html
 - GPT-4o mini: https://developers.openai.com/api/docs/models/gpt-4o-mini
+- GPT-4.1 mini, khusus opsi admin Baca dengan AI untuk scan gagal (disetujui 8 Oktober 2026): https://developers.openai.com/api/docs/models/gpt-4.1-mini
 - Model embedding: https://developers.openai.com/api/docs/models/text-embedding-3-small
 - OpenAI images/vision: https://developers.openai.com/api/docs/guides/images-vision
 - Cloudflare Secrets: https://developers.cloudflare.com/workers/configuration/secrets/

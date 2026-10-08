@@ -48,3 +48,13 @@ test('vision accepts bounded ordered crops and rejects ambiguous or excessive im
   assert.throws(() => prepare('/vision', { images: [image], image }));
   assert.throws(() => prepare('/vision', { images: [] }));
 });
+
+test('enhanced OCR selects only the fixed vision model and cannot change chat', () => {
+  const image = 'data:image/jpeg;base64,YWJj';
+  assert.equal(prepare('/vision', { image, enhanced: true }).body.model, 'gpt-4.1-mini');
+  assert.equal(prepare('/vision', { image, enhanced: false }).body.model, 'gpt-4o-mini');
+  assert.equal(prepare('/answer', payload).body.model, 'gpt-4o-mini');
+  assert.throws(() => prepare('/vision', { image, enhanced: 'true' }));
+  assert.throws(() => prepare('/vision', { image, model: 'other' }));
+  assert.throws(() => prepare('/answer', { ...payload, enhanced: true }));
+});

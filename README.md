@@ -42,6 +42,7 @@ Gunakan alamat `127.0.0.1` yang sama secara konsisten agar pemeriksaan origin da
 1. Login admin, lalu pilih **Uji koneksi AI**. Status konfigurasi di UI belum membuktikan OpenAI dapat dihubungi; tombol ini melakukan satu request embedding kecil yang berbiaya.
 2. Upload PDF dengan judul yang jelas. Batas 100 MiB dan 300 halaman secara default. PDF terenkripsi, rusak, dan non-PDF ditolak.
 3. Tunggu status siap. Pemrosesan berjalan di background dengan progres. PDF scan membutuhkan waktu OCR dan mungkin bantuan vision.
+   Jika gagal, **Baca dengan AI** membaca scan langsung dengan GPT-4.1 mini melalui dua pembacaan terpisah. Ini menggunakan API berbayar; chatbot tetap GPT-4o mini. Mode disimpan dan **Proses ulang** melanjutkan mode terakhir serta memakai cache halaman yang sudah lolos. Dokumen tetap ditahan bila hasil belum konsisten. Tidak perlu upload ulang.
 4. Ajukan pertanyaan di chat. Pertanyaan lanjutan menggunakan maksud pertanyaan sebelumnya dan retrieval baru. SIRA meminta klarifikasi jika konteks belum cukup.
 5. Ubah judul tanpa embedding ulang, ganti PDF melalui versi baru, atau hapus melalui admin. Versi lama tetap aktif jika penggantian gagal. Pekerjaan yang terputus ditandai gagal saat startup dan dapat diproses ulang.
 

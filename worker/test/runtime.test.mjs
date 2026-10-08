@@ -70,6 +70,20 @@ test('Durable Object quotas apply across concurrent requests', async () => {
     const responses = await Promise.all(Array.from({ length: 5 }, () => post(mf)));
     assert.equal(responses.filter((r) => r.status === 200).length, 2);
     assert.equal(responses.filter((r) => r.status === 429).length, 3);
+    for (const response of responses.filter((r) => r.status === 429))
+      assert.equal((await response.json()).code, 'relay_budget');
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test('minute throttling is distinct from the total budget', async () => {
+  const mf = runtime({ REQUESTS_PER_MINUTE: '1' });
+  try {
+    assert.equal((await post(mf)).status, 200);
+    const blocked = await post(mf);
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).code, 'relay_rate');
   } finally {
     await mf.dispose();
   }

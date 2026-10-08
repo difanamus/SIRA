@@ -91,6 +91,18 @@ def verified_transcription(result):
     return result["text"]
 
 
+def consistent_readings(candidate, confirmation):
+    def plain(value):
+        return re.sub(r"\W+", "", value).casefold()
+
+    similarity = SequenceMatcher(None, plain(candidate), plain(confirmation), autojunk=False).ratio()
+    if critical_signature(candidate) != critical_signature(confirmation) or similarity < 0.94:
+        raise AIError(
+            "Pembacaan ulang OCR/AI masih berbeda pada angka, negasi, atau isi. "
+            "Dokumen belum diaktifkan; gunakan scan lebih jelas atau koreksi teks yang diverifikasi."
+        )
+
+
 def chunk_page(text, version_id, page, target=650, overlap=100):
     # Keep source pages explicit. Prefer paragraph boundaries while bounding tokens.
     paragraphs = re.split(r"\n\s*\n", text.strip())
@@ -221,14 +233,7 @@ class Ingestion:
                     # Agreement is a cross-check, never a guarantee of correctness.
                     confirmation = verified_transcription(self.relay.vision(vision_images(original)))
 
-                    def plain(value):
-                        return re.sub(r"\W+", "", value).casefold()
-
-                    similarity = SequenceMatcher(None, plain(candidate), plain(confirmation), autojunk=False).ratio()
-                    if critical_signature(candidate) != critical_signature(confirmation) or similarity < 0.94:
-                        raise AIError(
-                            "Pembacaan ulang OCR/AI masih berbeda pada angka, negasi, atau isi. Perlu scan lebih jelas sebelum dokumen dapat diaktifkan."
-                        )
+                    consistent_readings(candidate, confirmation)
                     method = "ocr+vision-recheck-crops-v1"
                     warning += (
                         " Perbedaan OCR diperiksa melalui dua pembacaan vision; tetap memerlukan verifikasi manusia."
@@ -239,6 +244,19 @@ class Ingestion:
         if not readable(text):
             raise AIError("Teks halaman scan terlalu sedikit atau tidak terbaca. Dokumen belum diaktifkan.")
         return text, method, warning
+
+    def extract_with_ai(self, image):
+        # Explicit admin action: read scans directly, even if local OCR is unavailable.
+        # The confirmation does not receive the first transcript.
+        candidate = verified_transcription(self.relay.vision(vision_images(preprocess(image)), enhanced=True))
+        confirmation = verified_transcription(self.relay.vision(vision_images(image), enhanced=True))
+        consistent_readings(candidate, confirmation)
+        return (
+            candidate,
+            "ocr+ai-4.1-mini-crops-v1",
+            "Scan dibaca dengan GPT-4.1 mini dan diperiksa melalui dua pembacaan terpisah. "
+            "Kesepakatan AI bukan jaminan benar; angka dan ketentuan tetap perlu verifikasi manusia.",
+        )
 
     def process(self, version_id):
         started = time.monotonic()
@@ -265,8 +283,10 @@ class Ingestion:
                         cached = self.db.one(
                             "SELECT * FROM pages WHERE version_id=? AND number=?", (version_id, number)
                         )
-                        if cached and cached["method"].startswith("ocr") and not cached["method"].endswith("crops-v1"):
-                            cached = None
+                        if cached and cached["method"].startswith("ocr"):
+                            required = "ai-4.1-mini-crops-v1" if version["ocr_mode"] == "ai" else "crops-v1"
+                            if not cached["method"].endswith(required):
+                                cached = None
                         text = cached["text"] if cached else (page.extract_text(layout=False) or "")
                         method, warning = (cached["method"], cached["warning"]) if cached else ("text", "")
                         if not cached and not readable(text):
@@ -283,7 +303,13 @@ class Ingestion:
                                 text, method = "", "blank"
                             else:
                                 try:
-                                    text, method, warning = self.extract_scan(image)
+                                    if version["ocr_mode"] == "ai":
+                                        self.update(
+                                            version_id, stage=f"Baca dengan AI: halaman {number}/{len(pdf.pages)}"
+                                        )
+                                        text, method, warning = self.extract_with_ai(image)
+                                    else:
+                                        text, method, warning = self.extract_scan(image)
                                 except AIError as exc:
                                     raise AIError(f"Halaman {number}: {exc}") from exc
                         if warning:

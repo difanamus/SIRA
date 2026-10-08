@@ -30,6 +30,33 @@ class Vision:
         return self.result
 
 
+def test_direct_ai_bypasses_local_ocr_and_requires_two_agreeing_readings(monkeypatch, tmp_path):
+    text = "Persyaratan peserta: nilai 53 pada SMT II tahun 2025 dan SMT I tahun 2026, tidak otomatis lulus. " * 2
+    calls = []
+
+    def vision(images, *, enhanced=False):
+        calls.append(enhanced)
+        return {"text": text, "uncertain": False}
+
+    monkeypatch.setattr("pytesseract.image_to_data", lambda *a, **kw: pytest.fail("Local OCR must not run"))
+    ai = Vision(None)
+    ai.vision = vision
+    ingestion = Ingestion(Settings(data_dir=tmp_path), None, None, ai)
+    result, method, warning = ingestion.extract_with_ai(Image.new("RGB", (300, 400), "white"))
+    assert result == text and method == "ocr+ai-4.1-mini-crops-v1"
+    assert calls == [True, True] and "bukan jaminan" in warning
+
+
+def test_direct_ai_cannot_bypass_semester_disagreement(tmp_path):
+    text = "Persyaratan peserta: nilai 53 pada SMT II tahun 2025 dan tidak otomatis lulus. " * 2
+    results = [{"text": text, "uncertain": False}, {"text": text.replace("SMT II", "SMT I"), "uncertain": False}]
+    ai = Vision(None)
+    ai.vision = lambda images, **kw: results.pop(0)
+    ingestion = Ingestion(Settings(data_dir=tmp_path), None, None, ai)
+    with pytest.raises(AIError, match="berbeda pada angka, negasi"):
+        ingestion.extract_with_ai(Image.new("RGB", (300, 400), "white"))
+
+
 def test_uncertain_vision_cannot_activate_source(monkeypatch, tmp_path):
     text = "Persyaratan pangkat untuk peserta adalah minimal 5 tahun menurut dokumen. " * 3
     monkeypatch.setattr("pytesseract.image_to_data", lambda *a, **kw: ocr_data(text))

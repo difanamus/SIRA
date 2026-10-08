@@ -11,8 +11,8 @@ interface Env {
   QUOTA: DurableObjectNamespace;
 }
 type Counter = { requests: number; units: number; minute: number; minuteRequests: number };
-const json = (detail: string, status: number) =>
-  Response.json({ detail }, { status, headers: { 'Cache-Control': 'no-store' } });
+const json = (detail: string, status: number, code?: string) =>
+  Response.json({ detail, ...(code ? { code } : {}) }, { status, headers: { 'Cache-Control': 'no-store' } });
 
 function positive(value: string, fallback: number) {
   const number = Number(value);
@@ -43,11 +43,12 @@ export class Quota {
       }
       if (
         counter.requests >= positive(this.env.MAX_REQUESTS, 1000) ||
-        counter.units + units > positive(this.env.MAX_TOKEN_UNITS, 2000000) ||
-        counter.minuteRequests >= positive(this.env.REQUESTS_PER_MINUTE, 30)
+        counter.units + units > positive(this.env.MAX_TOKEN_UNITS, 2000000)
       ) {
-        return json('Batas penggunaan layanan AI tercapai.', 429);
+        return json('Kuota total relay tidak mencukupi untuk permintaan ini.', 429, 'relay_budget');
       }
+      if (counter.minuteRequests >= positive(this.env.REQUESTS_PER_MINUTE, 30))
+        return json('Batas permintaan per menit tercapai.', 429, 'relay_rate');
       counter.requests++;
       counter.units += units;
       counter.minuteRequests++;
@@ -121,7 +122,10 @@ export default {
       method: 'POST',
       body: JSON.stringify({ units: prepared.units }),
     });
-    if (!reservation.ok) return json('Batas penggunaan layanan AI tercapai.', 429);
+    if (!reservation.ok) {
+      const limit = (await reservation.json()) as { code?: string };
+      return json('Batas penggunaan layanan AI tercapai.', 429, limit.code);
+    }
     try {
       const upstream = await fetch('https://api.openai.com/v1/' + prepared.upstream, {
         method: 'POST',
@@ -140,6 +144,7 @@ export default {
             ? 'Layanan AI mencapai batas penggunaan.'
             : 'Layanan AI belum tersedia.',
           upstream.status === 429 ? 429 : 502,
+          upstream.status === 429 ? 'upstream_rate' : undefined,
         );
       }
       // Forward the stream directly: no text()/json() on a streaming answer.

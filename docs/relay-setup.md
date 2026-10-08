@@ -1,6 +1,6 @@
 # Relay pengujian Cloudflare
 
-Petunjuk ini untuk peserta/pemilik akun. Penguji cukup memasang aplikasi lokal dan menerima akses relay terbatas. Model yang ditetapkan server: GPT-4o mini untuk jawaban/vision dan text-embedding-3-small untuk embedding.
+Petunjuk ini untuk peserta/pemilik akun. Penguji cukup memasang aplikasi lokal dan menerima akses relay terbatas. Model yang ditetapkan server: GPT-4o mini untuk jawaban/vision otomatis, GPT-4.1 mini khusus tombol admin **Baca dengan AI**, dan text-embedding-3-small untuk embedding. Pilihan OCR berupa flag boolean tervalidasi; klien tidak dapat menentukan model arbitrer. Kuota dan masa berlaku relay tetap sama.
 
 ## Setup dengan skrip
 

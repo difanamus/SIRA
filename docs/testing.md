@@ -6,11 +6,11 @@ Tanggal: 8 Oktober 2026. Lingkungan: Windows pengembang, Python 3.12.14, Node.js
 
 | Pemeriksaan | Hasil |
 | --- | --- |
-| `pytest -q` | 22 lulus, 1 tes live dilewati secara default; 1 warning deprecation TestClient/httpx dari dependency |
+| `pytest -q` | 26 lulus, 1 tes live dilewati secara default; 1 warning deprecation TestClient/httpx dari dependency |
 | Ruff check backend/tests/scripts | Lulus |
 | TypeScript dan build frontend | Lulus, Vite 7.3.7 |
-| Policy test Worker | 4 lulus |
-| Runtime Miniflare Worker | 4 lulus |
+| Policy test Worker | 5 lulus |
+| Runtime Miniflare Worker | 5 lulus |
 | Bundel dry-run Wrangler | Lulus |
 | Parser empat skrip PowerShell | Lulus |
 | Browser desktop 1440×1000 dan mobile 390×844 | Chat, login admin, logout, KB kosong, reset refresh bekerja; tidak ada error JavaScript dalam alur yang diperiksa |
@@ -64,4 +64,12 @@ Perintah opt-in `SIRA_RUN_LIVE=1` pada `tests/test_live.py` lulus 1 tes integras
 - Konflik ambang nilai 60 dan 80 dijelaskan dengan masing-masing sumber, tanpa menetapkan satu pedoman sebagai yang berlaku.
 - Tidak ditemukan pola key OpenAI pada `.env`, log Wrangler lokal yang diperiksa, SQLite aplikasi, source kandidat Git, atau build frontend. Token/password admin nyata juga tidak ditemukan pada source/build. Pemeriksaan ini tidak mencakup seluruh file/proses komputer.
 
-Scan SBP tetap berstatus gagal pada pemeriksaan halaman 3. Model GPT-4o mini sempat mengubah semester II menjadi I dan melewatkan teks; perubahan model OCR belum dilakukan sambil menunggu keputusan pengguna. Chat dan embedding tetap memakai model yang disepakati.
+Model GPT-4o mini sempat mengubah semester II menjadi I dan melewatkan teks pada scan SBP halaman 3. Setelah persetujuan pengguna, tombol **Baca dengan AI** ditambahkan untuk membaca scan langsung menggunakan GPT-4.1 mini. Tes lokal memeriksa bypass Tesseract, dua pembacaan independen, penolakan perbedaan semester, invalidasi cache model lama, persistensi mode, resume tanpa pembacaan AI ulang setelah kegagalan embedding, serta autentikasi/CSRF. Chat dan embedding tetap memakai model yang disepakati. Hasil scan nyata dicatat setelah pengujian.
+
+## Uji tombol Baca dengan AI pada dokumen SBP
+
+- Relay mode GPT-4.1 mini sudah dideploy tanpa perubahan kuota atau masa aktif. Tombol admin diuji melalui browser nyata, respons 200 dan progres pemrosesan tampil. Desktop/mobile tidak menunjukkan error JavaScript atau overflow horizontal.
+- Dua pembacaan awal halaman 3 konsisten. Semester II 2025, semester I 2026, Rikkes 53 (K1), TKJ 41, rentang nilai dan negasi cocok pada pemeriksaan visual terhadap halaman asli.
+- Pemrosesan dokumen lengkap menerima halaman 1–4 dan menyimpan hasil dengan metode `ocr+ai-4.1-mini-crops-v1`. Sampel nomor rujukan, MDDP 0/5/4/3 tahun, materai 10.000, periode semester, nilai Litcatpers dan pendidikan dicocokkan dengan gambar. Pemeriksaan ini belum membuktikan akurasi umum.
+- Halaman 5 terhenti karena kuota total relay 2 juta unit reservasi tidak lagi cukup untuk satu request vision (60 ribu unit). Ini bukan kegagalan konsistensi teks. Resume berikutnya menggunakan cache empat halaman, kemudian mengembalikan kode `relay_budget` pada halaman 5. Kode tersebut dibedakan dari `relay_rate` dan `upstream_rate`; tidak menyarankan menunggu untuk batas total.
+- Permintaan persetujuan kenaikan kuota menjadi 4 juta unit sudah diajukan. Belum dinaikkan sebelum ada jawaban. Scan belum aktif; halaman 5–12 serta jawaban SBP masih perlu diuji. Unit reservasi bukan token tagihan atau batas biaya dolar.

@@ -9,10 +9,16 @@ class AIError(Exception):
     pass
 
 
-def upstream_error(status):
+def upstream_error(status, code=None):
     if status in (401, 403):
         return "Akses layanan AI belum aktif atau sudah berakhir. Silakan hubungi admin."
     if status == 429:
+        if code == "relay_budget":
+            return "Kuota total relay tidak mencukupi untuk pemrosesan ini. Pemilik layanan perlu meninjau batas penggunaan."
+        if code == "relay_rate":
+            return "Batas permintaan relay per menit tercapai. Tunggu satu menit, lalu proses ulang."
+        if code == "upstream_rate":
+            return "Batas penggunaan OpenAI tercapai. Pemilik layanan perlu memeriksa saldo atau rate limit OpenAI."
         return "Batas penggunaan layanan AI tercapai. Silakan coba beberapa saat lagi."
     return "Layanan AI sedang tidak tersedia. Silakan coba kembali."
 
@@ -37,7 +43,11 @@ class Relay:
                     time.sleep(2**attempt)
                     continue
                 if response.status_code != 200:
-                    raise AIError(upstream_error(response.status_code))
+                    try:
+                        code = response.json().get("code")
+                    except (ValueError, AttributeError):
+                        code = None
+                    raise AIError(upstream_error(response.status_code, code))
                 return response.json()
             except (httpx.HTTPError, ValueError) as exc:
                 if attempt == 2:
@@ -58,8 +68,11 @@ class Relay:
         except (KeyError, TypeError, ValueError) as exc:
             raise AIError("Format embedding layanan AI tidak sesuai.") from exc
 
-    def vision(self, image):
-        result = self.post("vision", {"images": image} if isinstance(image, list) else {"image": image})
+    def vision(self, image, *, enhanced=False):
+        payload = {"images": image} if isinstance(image, list) else {"image": image}
+        if enhanced:
+            payload["enhanced"] = True
+        result = self.post("vision", payload)
         try:
             choice = result["choices"][0]
             if choice.get("finish_reason") != "stop":

@@ -103,7 +103,9 @@ export function prepare(path: string, value: unknown): Prepared {
     };
   }
   if (path === '/vision') {
-    keys(payload, ['image', 'images']);
+    keys(payload, ['image', 'images', 'enhanced']);
+    if (payload.enhanced !== undefined && typeof payload.enhanced !== 'boolean')
+      throw new Error('Pilihan pembacaan AI tidak valid.');
     if (payload.image !== undefined && payload.images !== undefined)
       throw new Error('Gunakan satu format gambar.');
     const values = payload.images ?? [payload.image];
@@ -118,7 +120,7 @@ export function prepare(path: string, value: unknown): Prepared {
     return {
       upstream: 'chat/completions',
       body: {
-        model: 'gpt-4o-mini',
+        model: payload.enhanced === true ? 'gpt-4.1-mini' : 'gpt-4o-mini',
         store: false,
         temperature: 0,
         max_completion_tokens: 6000,

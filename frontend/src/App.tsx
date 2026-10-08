@@ -796,6 +796,11 @@ function Admin({ health }: { health: Health | null }) {
                 kata yang memengaruhi makna ketentuan. Pemeriksaan hasil OCR tetap diperlukan
                 sebelum penggunaan operasional.
               </p>
+              <p>
+                Jika pemrosesan gagal, pilih “Baca dengan AI” untuk membaca halaman scan langsung
+                dengan GPT-4.1 mini. Proses ini menggunakan API berbayar dan tetap menahan dokumen
+                jika hasilnya belum konsisten. Model chatbot tetap GPT-4o mini.
+              </p>
               <div className="development-note">
                 <span>RENCANA PENGEMBANGAN</span>
                 <p>Pratinjau hasil ekstraksi per halaman dan koreksi manual oleh admin.</p>
@@ -853,6 +858,9 @@ function Admin({ health }: { health: Health | null }) {
                           <summary>Peringatan kualitas ekstraksi</summary>
                           <p>{doc.warning}</p>
                         </details>
+                      )}
+                      {doc.ocr_mode === 'ai' && (
+                        <p className="document-meta">Pembacaan scan dengan AI · GPT-4.1 mini</p>
                       )}
                       {editing === doc.id ? (
                         <form
@@ -916,21 +924,39 @@ function Admin({ health }: { health: Health | null }) {
                             />
                           </label>
                           {doc.status === 'failed' && (
-                            <button
-                              className="text-button"
-                              disabled={busy}
-                              onClick={() =>
-                                action(
-                                  () =>
-                                    api('/admin/documents/' + doc.id + '/retry', {
-                                      method: 'POST',
-                                    }),
-                                  'Dokumen masuk antrean proses ulang.',
-                                )
-                              }
-                            >
-                              Proses ulang
-                            </button>
+                            <>
+                              <button
+                                className="text-button"
+                                disabled={busy}
+                                onClick={() =>
+                                  action(
+                                    () =>
+                                      api('/admin/documents/' + doc.id + '/retry', {
+                                        method: 'POST',
+                                      }),
+                                    'Dokumen masuk antrean proses ulang.',
+                                  )
+                                }
+                              >
+                                Proses ulang
+                              </button>
+                              <button
+                                className="text-button"
+                                disabled={busy || !health?.ai_ready}
+                                title="Baca scan dengan GPT-4.1 mini; menggunakan API berbayar"
+                                onClick={() =>
+                                  action(
+                                    () =>
+                                      api('/admin/documents/' + doc.id + '/read-ai', {
+                                        method: 'POST',
+                                      }),
+                                    'Dokumen masuk antrean pembacaan AI. Hasil tetap diperiksa sebelum diaktifkan.',
+                                  )
+                                }
+                              >
+                                Baca dengan AI
+                              </button>
+                            </>
                           )}
                           <button
                             className="text-button danger"

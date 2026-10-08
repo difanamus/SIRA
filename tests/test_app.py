@@ -193,6 +193,37 @@ def test_failed_replace_preserves_active_version_and_retry(harness):
     assert doc["active_version"] != first and doc["pending_version"] is None
 
 
+def test_read_ai_replaces_scan_cache_persists_mode_and_resumes_without_recharge(harness, monkeypatch):
+    from backend.app.db import Database
+
+    client, ctx, ai, settings = harness
+    monkeypatch.setattr("pdfplumber.page.Page.extract_text", lambda *a, **kw: "")
+    text = "Hasil transkripsi pengujian dari halaman scan, memiliki nilai 53 dan semester II tahun 2025. " * 3
+    monkeypatch.setattr(ctx.ingestion, "extract_scan", lambda image: (text, "ocr+vision-crops-v1", ""))
+    calls = []
+
+    def direct(image):
+        calls.append(1)
+        return text, "ocr+ai-4.1-mini-crops-v1", "Diperiksa dengan AI."
+
+    monkeypatch.setattr(ctx.ingestion, "extract_with_ai", direct)
+    ai.fail = True
+    doc_id = upload(client)
+    wait_document(ctx, doc_id, "failed")
+    assert client.post(f"/api/admin/documents/{doc_id}/read-ai", headers={"X-CSRF-Token": "wrong"}).status_code == 403
+    assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 200
+    wait_document(ctx, doc_id, "failed")
+    assert calls == [1]  # Existing 4o-mini scan cache was invalidated.
+    assert Database(settings.data_dir).document_list()[0]["ocr_mode"] == "ai"
+    ai.fail = False
+    assert client.post(f"/api/admin/documents/{doc_id}/retry").status_code == 200
+    doc = wait_document(ctx, doc_id)
+    assert calls == [1] and doc["ocr_mode"] == "ai"
+    assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 409
+    client.cookies.clear()
+    assert client.post(f"/api/admin/documents/{doc_id}/read-ai").status_code == 401
+
+
 def test_delete_invalidates_history_and_vectors(harness):
     client, ctx, ai, _ = harness
     doc_id = upload(client)
