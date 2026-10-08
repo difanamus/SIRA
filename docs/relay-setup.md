@@ -30,7 +30,7 @@ Jika deployment awal gagal, skrip berhenti sebelum mengaktifkan akses. Jika pema
 | `MAX_TOKEN_UNITS` | 2000000 | Total unit reservasi konservatif sejak penghitung dibuat |
 | `REQUESTS_PER_MINUTE` | 30 | Batas seluruh pemegang token per menit |
 
-Unit reservasi bukan hitungan token tagihan atau batas dolar yang presisi. Teks menggunakan ukuran byte UTF-8 ditambah reservasi output; vision menggunakan reservasi tetap 60000 unit per request. Request gagal setelah reservasi tetap mengurangi jatah. Penghitung disimpan pada Durable Object dan tidak direset hanya dengan redeploy atau mengganti tanggal/token. Periksa pula penggunaan pada akun OpenAI; batas proyek harus disesuaikan oleh pemilik akun.
+Unit reservasi bukan hitungan token tagihan atau batas dolar yang presisi. Teks menggunakan ukuran byte UTF-8 ditambah reservasi output; vision GPT-4.1 mini menggunakan 60000 unit per request, fallback potongan GPT-5.6 Sol menggunakan 200000. Request gagal setelah reservasi tetap mengurangi jatah. Penghitung disimpan pada Durable Object dan tidak direset hanya dengan redeploy atau mengganti tanggal/token. Periksa pula penggunaan pada akun OpenAI; batas proyek harus disesuaikan oleh pemilik akun.
 
 Biaya Cloudflare/OpenAI mengikuti akun pemilik. Vision untuk scan dapat menghabiskan kuota lebih cepat daripada chat sederhana. Nilai batas tersedia untuk diubah sebelum pemberian akses penguji.
 
@@ -42,7 +42,7 @@ Untuk mengganti token, buat token baru lokal dengan skrip generator (menolak ove
 
 ## Batas kepercayaan
 
-Relay hanya menerima `POST /embeddings`, `/answer`, dan `/vision`, dengan skema terbatas. Model, endpoint OpenAI, instruksi sistem, dan anggaran output ditetapkan di Worker. Tidak ada arbitrary URL proxy atau model dari klien. Tidak ada CORS browser publik; backend lokal yang menghubungi relay.
+Relay hanya menerima `POST /embeddings`, `/answer`, `/vision` (GPT-4.1 mini), dan `/vision-fragment` (GPT-5.6 Sol, satu JPEG maksimal payload 2 MB), dengan skema terbatas. Model, endpoint OpenAI, instruksi sistem, dan anggaran output ditetapkan di Worker. Tidak ada arbitrary URL proxy atau model dari klien. Tidak ada CORS browser publik; backend lokal yang menghubungi relay. Pembatasan luas crop dan jumlah eskalasi per halaman dilakukan backend; token relay tetap dibatasi kuota karena pemilik PC dapat mengekstraknya.
 
 Pemilik PC dapat mengekstrak token relay lokal. Karena itu perlindungan utama akses penguji adalah masa berlaku, kuota persisten, batas operasi, rate limit, dan pencabutan. Token tersebut tidak memberikan akses Cloudflare Dashboard atau API key OpenAI.
 

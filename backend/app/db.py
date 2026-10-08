@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY, title TEXT NOT NULL, f
 CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id), path TEXT NOT NULL, sha256 TEXT NOT NULL, size INTEGER NOT NULL, status TEXT NOT NULL, stage TEXT NOT NULL DEFAULT 'Menunggu antrean', progress INTEGER NOT NULL DEFAULT 0, page_count INTEGER NOT NULL DEFAULT 0, warning TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS pages(version_id TEXT NOT NULL REFERENCES versions(id), number INTEGER NOT NULL, text TEXT NOT NULL, method TEXT NOT NULL, warning TEXT NOT NULL, PRIMARY KEY(version_id,number));
 CREATE TABLE IF NOT EXISTS review_pages(version_id TEXT NOT NULL REFERENCES versions(id), number INTEGER NOT NULL, text TEXT NOT NULL, method TEXT NOT NULL, warning TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(version_id,number));
+CREATE TABLE IF NOT EXISTS ocr_regions(version_id TEXT NOT NULL REFERENCES versions(id), page INTEGER NOT NULL, number INTEGER NOT NULL, top REAL NOT NULL, bottom REAL NOT NULL, state TEXT NOT NULL, text TEXT NOT NULL, method TEXT NOT NULL, warning TEXT NOT NULL, required INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(version_id,page,number));
 CREATE TABLE IF NOT EXISTS chunks(id TEXT PRIMARY KEY, version_id TEXT NOT NULL REFERENCES versions(id), page INTEGER NOT NULL, heading TEXT NOT NULL, text TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS chunks_version ON chunks(version_id);
 CREATE INDEX IF NOT EXISTS versions_doc ON versions(document_id);
@@ -27,7 +28,16 @@ class Database:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(versions)")}
             if "ocr_mode" not in columns:
                 conn.execute("ALTER TABLE versions ADD COLUMN ocr_mode TEXT NOT NULL DEFAULT 'auto'")
-            conn.execute("UPDATE meta SET value=3 WHERE key='schema_version' AND value<3")
+            review_columns = {row["name"] for row in conn.execute("PRAGMA table_info(review_pages)")}
+            if "required" not in review_columns:
+                conn.execute("ALTER TABLE review_pages ADD COLUMN required INTEGER NOT NULL DEFAULT 1")
+                # Preserve manual edits. Already accepted matching drafts need no
+                # mandatory human confirmation when upgrading existing installations.
+                conn.execute("""UPDATE review_pages SET required=0 WHERE revision=0 AND EXISTS (
+                    SELECT 1 FROM pages p WHERE p.version_id=review_pages.version_id
+                    AND p.number=review_pages.number AND p.text=review_pages.text
+                    AND (p.method IN ('text','blank','manual-reviewed-v1') OR p.method LIKE '%ai-4.1-mini-crops-v1'))""")
+            conn.execute("UPDATE meta SET value=4 WHERE key='schema_version' AND value<4")
 
     @contextmanager
     def connect(self):

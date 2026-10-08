@@ -102,8 +102,9 @@ export function prepare(path: string, value: unknown): Prepared {
       streaming: true,
     };
   }
-  if (path === '/vision') {
-    keys(payload, ['image', 'images', 'enhanced']);
+  if (path === '/vision' || path === '/vision-fragment') {
+    const fragment = path === '/vision-fragment';
+    keys(payload, fragment ? ['image'] : ['image', 'images', 'enhanced']);
     if (payload.enhanced !== undefined && typeof payload.enhanced !== 'boolean')
       throw new Error('Pilihan pembacaan AI tidak valid.');
     if (payload.image !== undefined && payload.images !== undefined)
@@ -114,19 +115,19 @@ export function prepare(path: string, value: unknown): Prepared {
     const images = values.map((value) => text(value, 7500000));
     if (
       images.some((image) => !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(image)) ||
-      byteLength(images) > 7500000
+      byteLength(images) > (fragment ? 2000000 : 7500000)
     )
       throw new Error('Gambar harus JPEG base64 dalam batas ukuran.');
     return {
       upstream: 'chat/completions',
       body: {
-        model: payload.enhanced === true ? 'gpt-4.1-mini' : 'gpt-4o-mini',
+        model: fragment ? 'gpt-5.6-sol' : 'gpt-4.1-mini',
         store: false,
-        temperature: 0,
-        max_completion_tokens: 6000,
+        ...(fragment ? { reasoning_effort: 'low' } : { temperature: 0 }),
+        max_completion_tokens: fragment ? 4000 : 6000,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: OCR_SYSTEM },
+          { role: 'system', content: OCR_SYSTEM + (fragment ? '\nIni hanya potongan halaman. Salin hanya teks yang terlihat; jangan mengisi bagian di luar gambar, melengkapi kalimat yang terpotong, atau menebak konteks halaman.' : '') },
           {
             role: 'user',
             content: [
@@ -139,7 +140,8 @@ export function prepare(path: string, value: unknown): Prepared {
           },
         ],
       },
-      units: 60000,
+      // Internal reservations, not a dollar cap. Sol is charged a larger reservation.
+      units: fragment ? 200000 : 60000,
       streaming: false,
     };
   }

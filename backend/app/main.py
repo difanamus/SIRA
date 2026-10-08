@@ -348,9 +348,19 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         ctx = request.app.state.ctx
         version = pending_review(ctx, document_id)
         pages = ctx.db.rows(
-            "SELECT number,text,method,warning,confirmed,revision FROM review_pages WHERE version_id=? ORDER BY number",
+            "SELECT number,text,method,warning,confirmed,revision,required FROM review_pages WHERE version_id=? ORDER BY number",
             (version["id"],),
         )
+        regions = ctx.db.rows(
+            "SELECT page,number,top,bottom,warning FROM ocr_regions WHERE version_id=? AND required=1 ORDER BY page,number",
+            (version["id"],),
+        )
+        for page in pages:
+            page["regions"] = (
+                [part for part in regions if part["page"] == page["number"]]
+                if page["required"] and not page["confirmed"]
+                else []
+            )
         return {
             "version_id": version["id"],
             "page_count": version["page_count"],
@@ -365,12 +375,22 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         tags=["Review"],
         dependencies=[Depends(require_admin)],
     )
-    def review_image(document_id: str, number: int, version_id: str, request: Request):
+    def review_image(document_id: str, number: int, version_id: str, request: Request, region: int | None = None):
         ctx = request.app.state.ctx
         version = pending_review(ctx, document_id, version_id)
         if not 1 <= number <= version["page_count"]:
             raise HTTPException(404, "Halaman tidak ditemukan.")
         image = render_page(version["path"], number, maximum=2400)
+        if region is not None:
+            bounds = ctx.db.one(
+                "SELECT top,bottom FROM ocr_regions WHERE version_id=? AND page=? AND number=?",
+                (version_id, number, region),
+            )
+            if not bounds:
+                raise HTTPException(404, "Potongan halaman tidak ditemukan.")
+            image = image.crop(
+                (0, round(bounds["top"] * image.height), image.width, round(bounds["bottom"] * image.height))
+            )
         buffer = io.BytesIO()
         image.convert("RGB").save(buffer, format="JPEG", quality=92)
         return Response(buffer.getvalue(), media_type="image/jpeg")
@@ -392,7 +412,7 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
                 raise HTTPException(409, "Review belum siap atau pemrosesan sedang berjalan.")
             with ctx.db.connect() as conn:
                 result = conn.execute(
-                    "UPDATE review_pages SET text=?,confirmed=?,method='manual',revision=revision+1 WHERE version_id=? AND number=? AND revision=?",
+                    "UPDATE review_pages SET text=?,confirmed=?,required=1,method='manual',revision=revision+1 WHERE version_id=? AND number=? AND revision=?",
                     (body.text, int(body.confirmed), version["id"], number, body.revision),
                 )
                 if not result.rowcount:
@@ -415,9 +435,11 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
                     "SELECT * FROM review_pages WHERE version_id=? ORDER BY number", (version["id"],)
                 ).fetchall()
                 if len(pages) != version["page_count"] or any(
-                    row["number"] != i or not row["confirmed"] for i, row in enumerate(pages, 1)
+                    row["number"] != i or (row["required"] and not row["confirmed"]) for i, row in enumerate(pages, 1)
                 ):
-                    raise HTTPException(409, "Cocokkan dan konfirmasi seluruh halaman sebelum membuat indeks.")
+                    raise HTTPException(
+                        409, "Cocokkan dan konfirmasi halaman yang memerlukan review sebelum membuat indeks."
+                    )
                 if not any(row["text"].strip() for row in pages) or sum(len(row["text"]) for row in pages) > 5_000_000:
                     raise HTTPException(422, "Isi dokumen kosong atau terlalu besar.")
                 conn.execute("DELETE FROM pages WHERE version_id=?", (version["id"],))
@@ -428,8 +450,8 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
                             version["id"],
                             row["number"],
                             row["text"],
-                            "manual-reviewed-v1",
-                            "Teks dikonfirmasi admin melalui review per halaman.",
+                            "manual-reviewed-v1" if row["confirmed"] else row["method"],
+                            "Teks dikonfirmasi admin melalui review." if row["confirmed"] else row["warning"],
                         )
                         for row in pages
                     ],

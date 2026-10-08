@@ -101,7 +101,7 @@ async function readBody(request: Request) {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (!['/embeddings', '/answer', '/vision'].includes(url.pathname))
+    if (!['/embeddings', '/answer', '/vision', '/vision-fragment'].includes(url.pathname))
       return json('Tidak ditemukan.', 404);
     if (request.method !== 'POST') return json('Metode tidak diizinkan.', 405);
     if (!(await authorised(request, env.RELAY_TOKEN_HASH))) return json('Akses ditolak.', 401);

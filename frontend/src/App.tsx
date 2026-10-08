@@ -799,9 +799,10 @@ function Admin({ health }: { health: Health | null }) {
                 sebelum penggunaan operasional.
               </p>
               <p>
-                Jika pemrosesan gagal, pilih “Baca dengan AI” untuk membaca halaman scan langsung
-                dengan GPT-4.1 mini. Proses ini menggunakan API berbayar dan tetap menahan dokumen
-                jika hasilnya belum konsisten. Model chatbot tetap GPT-4o mini.
+                Scan dibaca dengan OCR lokal, lalu bagian yang meragukan diperiksa GPT-4.1 mini.
+                Jika masih berbeda, GPT-5.6 Sol membantu hanya potongan terkait, maksimal dua
+                potongan per halaman. Bantuan AI berbayar. Jika masih belum jelas, tersedia review
+                bagian yang ditandai. Model chatbot tetap GPT-4o mini.
               </p>
               <div className="development-note">
                 <span>REVIEW OLEH ADMIN</span>
@@ -879,7 +880,7 @@ function Admin({ health }: { health: Health | null }) {
                         </details>
                       )}
                       {doc.ocr_mode === 'ai' && (
-                        <p className="document-meta">Pembacaan scan dengan AI · GPT-4.1 mini</p>
+                        <p className="document-meta">OCR lokal → GPT-4.1 mini → GPT-5.6 Sol untuk bagian meragukan</p>
                       )}
                       {editing === doc.id ? (
                         <form
@@ -964,7 +965,7 @@ function Admin({ health }: { health: Health | null }) {
                               <button
                                 className="text-button"
                                 disabled={busy || !health?.ai_ready}
-                                title="Baca scan dengan GPT-4.1 mini; menggunakan API berbayar"
+                                title="Periksa scan dengan GPT-4.1 mini dan fallback Sol pada potongan meragukan; API berbayar"
                                 onClick={() =>
                                   action(
                                     () =>

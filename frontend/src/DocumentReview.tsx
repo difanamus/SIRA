@@ -9,6 +9,8 @@ type Page = {
   warning: string;
   confirmed: number;
   revision: number;
+  required: number;
+  regions: { number: number; top: number; bottom: number; warning: string }[];
 };
 type Review = {
   version_id: string;
@@ -36,6 +38,7 @@ export function DocumentReview({
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [zoom, setZoom] = useState(false);
+  const [region, setRegion] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [snapshot, setSnapshot] = useState({ version_id: '', revision: 0 });
@@ -45,7 +48,8 @@ export function DocumentReview({
   const base = '/admin/documents/' + doc.id + '/review';
   const selected = data?.pages.find((page) => page.number === number);
   const ready = data?.status === 'review';
-  const checked = data?.pages.filter((page) => page.confirmed).length ?? 0;
+  const required = data?.pages.filter((page) => page.required).length ?? 0;
+  const checked = data?.pages.filter((page) => page.required && page.confirmed).length ?? 0;
 
   useEffect(() => {
     panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -74,6 +78,7 @@ export function DocumentReview({
     setBlank(selected?.text === '');
     setDirty(false);
     setZoom(false);
+    setRegion(null);
     setSnapshot({ version_id: data?.version_id ?? '', revision: selected?.revision ?? 0 });
     const frame = requestAnimationFrame(() => {
       if (editor.current) editor.current.scrollTop = 0;
@@ -84,7 +89,7 @@ export function DocumentReview({
     });
     // A background poll must not replace unsaved edits.
     return () => cancelAnimationFrame(frame);
-  }, [data?.version_id, selected?.number, selected?.revision]);
+  }, [data?.version_id, selected?.number, selected?.revision, selected?.text]);
 
   async function save() {
     if (!selected || !data) return;
@@ -147,12 +152,12 @@ export function DocumentReview({
       <div className="review-intro">
         <p>
           Cocokkan teks dengan gambar asli, perbaiki angka, tanggal, periode, negasi, dan hubungan
-          kolom tabel. Konfirmasi setiap halaman setelah diperiksa. Dokumen belum digunakan untuk
-          chat.
+          kolom tabel pada bagian yang ditandai. Halaman yang sudah lolos otomatis tidak wajib
+          dikonfirmasi ulang. Dokumen belum digunakan untuk chat.
         </p>
         <p>
           <strong>
-            {checked}/{data?.page_count ?? doc.page_count} halaman dikonfirmasi.
+            {checked}/{required} halaman yang perlu review sudah dikonfirmasi.
           </strong>{' '}
           {data?.status === 'processing' ? data.stage : ''}
         </p>
@@ -182,7 +187,7 @@ export function DocumentReview({
             }}
             aria-current={n === number ? 'page' : undefined}
           >
-            {data?.pages.find((page) => page.number === n)?.confirmed ? '✓ ' : ''}
+            {data?.pages.find((page) => page.number === n)?.confirmed || data?.pages.find((page) => page.number === n)?.required === 0 ? '✓ ' : '! '}
             {n}
           </button>
         ))}
@@ -196,10 +201,20 @@ export function DocumentReview({
                 {zoom ? 'Sesuaikan gambar' : 'Perbesar gambar'}
               </button>
             </div>
-            <div className="review-image" ref={preview}>
+            {!!selected.regions?.length && (
+              <nav className="review-pages" aria-label="Bagian yang perlu diperiksa">
+                <button className="button secondary compact" onClick={() => setRegion(null)}>Seluruh halaman</button>
+                {selected.regions.map((part) => (
+                  <button key={part.number} className="button secondary compact" aria-pressed={region === part.number} onClick={() => setRegion(part.number)}>
+                    Bagian {part.number} ({Math.round(part.top * 100)}–{Math.round(part.bottom * 100)}%)
+                  </button>
+                ))}
+              </nav>
+            )}
+            <div className={'review-image' + (region === null ? '' : ' fragment')} ref={preview}>
               <img
                 className={zoom ? 'zoomed' : ''}
-                src={'/api' + base + '/pages/' + number + '/image?version_id=' + data.version_id}
+                src={'/api' + base + '/pages/' + number + '/image?version_id=' + data.version_id + (region === null ? '' : '&region=' + region)}
                 alt={'Halaman asli ' + number + ' untuk dicocokkan dengan teks'}
               />
             </div>
@@ -228,10 +243,14 @@ export function DocumentReview({
               Sumber teks:{' '}
               {selected.method === 'manual'
                 ? 'Koreksi admin'
+                : selected.method === 'ocr-regions-draft'
+                  ? 'Draft OCR bertahap; perlu review'
+                : selected.method.includes('5.6-sol')
+                  ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'
                 : selected.method.includes('4.1')
                   ? 'GPT-4.1 mini'
                   : selected.method.includes('vision')
-                    ? 'OCR dan GPT-4o mini'
+                    ? 'OCR dan AI'
                     : selected.method.startsWith('ocr')
                       ? 'OCR lokal'
                       : selected.method === 'text'
@@ -265,7 +284,7 @@ export function DocumentReview({
                   setDirty(true);
                 }}
               />
-              Saya sudah mencocokkan seluruh teks halaman ini dengan gambar asli.
+              Saya sudah mencocokkan bagian yang perlu review dan koreksi saya dengan gambar asli.
             </label>
             <div className="review-actions">
               <button className="button primary" disabled={!ready || busy || !dirty} onClick={save}>
@@ -297,13 +316,13 @@ export function DocumentReview({
       )}
       <div className="review-footer">
         <p>
-          Setelah semua halaman dikonfirmasi, buat indeks dari teks yang sudah diperiksa. Langkah
+          Setelah halaman yang perlu review dikonfirmasi, buat indeks dari teks yang sudah diperiksa. Langkah
           ini memakai embedding OpenAI berbiaya kecil, tanpa membaca scan dengan AI lagi. Versi lama
           tetap aktif sampai indeks baru berhasil.
         </p>
         <button
           className="button primary"
-          disabled={!ready || busy || dirty || !data?.page_count || checked !== data.page_count}
+          disabled={!ready || busy || dirty || !data?.page_count || data.pages.length !== data.page_count || checked !== required}
           onClick={index}
         >
           Buat indeks dari hasil review

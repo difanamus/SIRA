@@ -164,7 +164,11 @@ def test_retry_reuses_accepted_ocr_pages_after_embedding_failure(harness, monkey
 
     def scan(image):
         calls.append(1)
-        return "Hasil transkripsi untuk pengujian cache halaman yang sudah diterima. " * 5, "ocr+vision-crops-v1", ""
+        return (
+            "Hasil transkripsi untuk pengujian cache halaman yang sudah diterima. " * 5,
+            "ocr+4.1-mini-regions-v2",
+            "",
+        )
 
     monkeypatch.setattr(ctx.ingestion, "extract_scan", scan)
     ai.fail = True
@@ -298,6 +302,78 @@ def test_manual_review_lifecycle_auth_stale_edits_blank_and_atomic_activation(ha
     client.cookies.clear()
     assert client.get(base + "/pages/1/image", params=version).status_code == 401
     assert client.get(base).status_code == 401
+
+
+def test_automatic_review_requires_only_unresolved_page_and_preview_crop(harness, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    from backend.app.ingestion import OCRReviewRequired
+
+    client, ctx, ai, _ = harness
+    monkeypatch.setattr("pdfplumber.page.Page.extract_text", lambda *a, **kw: "")
+    text = "Ketentuan pengujian: nilai minimal 53 dan tidak lulus otomatis. " * 2
+    calls = []
+
+    def scan(image):
+        calls.append(1)
+        if len(calls) == 2:
+            version, page = ctx.ingestion.scan_context
+            for part in range(1, 7):
+                ctx.db.execute(
+                    "INSERT INTO ocr_regions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        version,
+                        page,
+                        part,
+                        (part - 1) / 6,
+                        part / 6,
+                        '{"done":true}',
+                        text,
+                        "ocr-regions-v2",
+                        "Bagian 1: perlu koreksi." if part == 1 else "",
+                        int(part == 1),
+                    ),
+                )
+            raise OCRReviewRequired(text, "Bagian 1: perlu koreksi.")
+        return text, "ocr+4.1-mini-regions-v2", ""
+
+    monkeypatch.setattr(ctx.ingestion, "extract_scan", scan)
+    response = client.post(
+        "/api/admin/documents",
+        data={"title": "Review selektif"},
+        files={"file": ("scan.pdf", pdf_bytes(pages=3), "application/pdf")},
+    )
+    assert response.status_code == 202
+    doc_id = response.json()["id"]
+    doc = wait_document(ctx, doc_id, "review")
+    assert doc["active_version"] is None and ai.embeddings == 0 and len(calls) == 3
+    base = f"/api/admin/documents/{doc_id}/review"
+    review = client.get(base).json()
+    assert [page["required"] for page in review["pages"]] == [0, 1, 0]
+    assert len(review["pages"][1]["regions"]) == 1
+    version = {"version_id": review["version_id"]}
+    assert client.post(base + "/activate", json=version).status_code == 409
+    full = client.get(base + "/pages/2/image", params=version)
+    crop = client.get(base + "/pages/2/image", params={**version, "region": 1})
+    assert crop.status_code == 200
+    assert Image.open(io.BytesIO(crop.content)).height < Image.open(io.BytesIO(full.content)).height / 4
+    assert client.get(base + "/pages/2/image", params={**version, "region": 99}).status_code == 404
+    assert (
+        client.put(base + "/pages/2", json={**version, "revision": 0, "text": text, "confirmed": True}).status_code
+        == 200
+    )
+    assert not client.get(base).json()["pages"][1]["regions"]
+    assert client.post(base + "/activate", json=version).status_code == 200
+    ready = wait_document(ctx, doc_id)
+    assert len(calls) == 3 and ready["available"] == 1
+    pages = ctx.db.rows("SELECT * FROM pages WHERE version_id=? ORDER BY number", (ready["active_version"],))
+    assert [page["method"] for page in pages] == [
+        "ocr+4.1-mini-regions-v2",
+        "manual-reviewed-v1",
+        "ocr+4.1-mini-regions-v2",
+    ]
 
 
 def test_delete_invalidates_history_and_vectors(harness):

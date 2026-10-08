@@ -31,13 +31,13 @@ Kedua dokumen pedoman tidak otomatis menjadi knowledge base. Instalasi baru dimu
 - Tambah dokumen, ubah metadata, ganti file dokumen, dan hapus dokumen.
 - Penyimpanan persisten untuk PDF, hasil ekstraksi, metadata, serta embedding/index.
 - Pipeline parsing, OCR bila diperlukan, chunking, embedding, retrieval, dan generasi jawaban.
-- GPT-4o mini sebagai satu-satunya model jawaban; kemampuan vision dipakai untuk membantu OCR yang meragukan.
+- GPT-4o mini sebagai satu-satunya model jawaban. OCR: lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada potongan yang masih meragukan (keputusan pengguna 8 Oktober 2026).
 - Konteks percakapan per sesi untuk pertanyaan lanjutan.
 - Jawaban sopan dan profesional, disertai referensi dokumen berupa teks biasa.
 - Jawaban streaming dan penanganan kesalahan yang dapat dipahami pengguna.
 - Proteksi berlapis terhadap prompt injection, penyalahgunaan API, dan akses admin tanpa izin.
 - Dokumentasi API, README, bukti pengujian, serta panduan demo/video.
-- Review gambar asli dan koreksi teks per halaman oleh admin, ditambahkan atas permintaan pengguna 8 Oktober 2026. Draft lokal tidak menggunakan OCR AI; seluruh halaman harus dikonfirmasi sebelum indeks dibuat dan versi diaktifkan.
+- Review gambar asli dan koreksi teks per halaman oleh admin, ditambahkan atas permintaan pengguna 8 Oktober 2026. Draft review lokal tidak menggunakan OCR AI; konfirmasi diwajibkan hanya pada halaman yang belum lolos atau diedit admin sebelum indeks dibuat dan versi diaktifkan.
 
 ### Pengembangan lanjutan, belum diimplementasikan
 
@@ -62,7 +62,8 @@ Tidak ada link PDF atau fasilitas download dokumen untuk pengguna chat. Tanpa kl
 | OCR lokal | Tesseract, bahasa Indonesia dan Inggris | Ekstraksi teks scan; kualitas dibuktikan pada bahan uji |
 | Preprocessing | Pillow/OpenCV sesuai kebutuhan | Rotasi, deskew, kontras, dan penyesuaian gambar tanpa mengubah substansi |
 | Tokenisasi | tiktoken | Pengukuran ukuran chunk dan anggaran konteks |
-| Model jawaban/vision | OpenAI GPT-4o mini | Jawaban berbasis evidence dan bantuan pembacaan gambar |
+| Model jawaban | OpenAI GPT-4o mini | Jawaban berbasis evidence |
+| OCR AI | GPT-4.1 mini, fallback GPT-5.6 Sol | Mini memeriksa scan; Sol hanya potongan yang masih meragukan |
 | Model embedding | OpenAI text-embedding-3-small | Embedding chunk dan pertanyaan |
 | Relay AI | Cloudflare Workers, TypeScript, Secrets | Menjaga API key OpenAI di server dan membatasi permintaan AI |
 | Streaming | HTTP streaming/SSE | Mengirim respons bertahap sampai UI |
@@ -89,7 +90,7 @@ Cloudflare Worker milik peserta
   |-- Autentikasi akses pengujian, batas penggunaan, validasi operasi/model
   |-- API key OpenAI melalui Secrets
   |
-OpenAI: embedding, GPT-4o mini, bantuan vision
+OpenAI: embedding, GPT-4o mini untuk chat, GPT-4.1 mini dan fallback GPT-5.6 Sol untuk OCR
 ```
 
 - UI dan backend aplikasi dijalankan pada localhost; hasil build React dilayani FastAPI agar penguji tidak perlu menjalankan server frontend terpisah.
@@ -148,7 +149,7 @@ Urutan pemrosesan:
 3. Ekstrak teks per halaman. PDF campuran diputuskan per halaman, bukan berdasarkan seluruh file.
 4. Untuk halaman scan atau ekstraksi yang tidak memadai, render gambar dengan resolusi yang sesuai, lakukan preprocessing yang diperlukan, lalu jalankan OCR lokal.
 5. Tentukan bagian yang membutuhkan bantuan AI menggunakan gabungan sinyal: teks kosong/terlalu sedikit, karakter rusak, confidence OCR, tata letak sulit, tabel, dan ketidaksesuaian hasil ekstraksi.
-6. Kirim gambar bagian/halaman yang perlu diperiksa ke vision melalui Worker. Instruksikan transkripsi setia sumber dan penandaan bagian tak terbaca; jangan mengisi isi dokumen yang hilang.
+6. Kirim potongan meragukan ke GPT-4.1 mini melalui Worker. Pembacaan kedua mini dilakukan jika perlu; GPT-5.6 Sol menjadi opsi terakhir hanya untuk potongan yang masih berbeda/ragu, maksimal dua potongan per halaman. Batas crop menjaga baris dan sel tabel; detail ada pada `docs/ocr-fallback.md`. Instruksikan transkripsi setia sumber tanpa mengisi isi yang hilang.
 7. Jika hasil tetap tidak terbaca atau perbedaan kritis belum terselesaikan, tampilkan peringatan/kegagalan yang jujur. Jangan mengaktifkan versi sebagai knowledge base siap jika halaman penting belum berhasil diproses.
 8. Simpan teks, asal halaman, metode ekstraksi, dan peringatan. Hilangkan header/footer berulang secara hati-hati tanpa membuang makna pasal atau persyaratan.
 9. Pecah teks berdasarkan struktur bagian/pasal/persyaratan, lalu batas token. Pertahankan hubungan butir, negasi, angka, dan header tabel.
@@ -156,7 +157,7 @@ Urutan pemrosesan:
 
 Parameter awal untuk eksperimen, bukan nilai final yang sudah terbukti: chunk sekitar 500-800 token, overlap sekitar 80-120 token. Kalibrasi menggunakan kedua bahan uji; tabel atau ketentuan yang saling terkait tidak dipotong sembarangan.
 
-Confidence OCR dan kecocokan dua mesin bukan jaminan benar. Hasil scan perlu diperiksa terhadap gambar sumber, terutama pangkat, pendidikan, angka, tanggal, syarat, dan kata negasi. Permintaan pengguna pada 8 Oktober 2026 memperluas prototype dengan review dan koreksi per halaman: preview hanya untuk admin, draft persisten, konfirmasi tiap halaman, penolakan edit dari tab lama, dan aktivasi setelah seluruh halaman dikonfirmasi serta embedding berhasil.
+Confidence OCR dan kecocokan dua mesin bukan jaminan benar. Hasil scan perlu diperiksa terhadap gambar sumber, terutama pangkat, pendidikan, angka, tanggal, syarat, dan kata negasi. Permintaan pengguna pada 8 Oktober 2026 memperluas prototype dengan review dan koreksi per halaman: preview hanya untuk admin, draft persisten, penolakan edit dari tab lama, dan aktivasi setelah embedding berhasil. Pembaruan berikutnya pada hari yang sama membatasi konfirmasi wajib pada halaman/bagian yang belum lolos atau diedit; halaman lolos otomatis tidak perlu dikonfirmasi ulang.
 
 Keterangan wajib di admin:
 
@@ -164,7 +165,7 @@ Keterangan wajib di admin:
 >
 > Ekstraksi dokumen scan dapat menghasilkan kesalahan, terutama pada angka, tabel, dan kata yang memengaruhi makna ketentuan. Pemeriksaan hasil OCR tetap diperlukan sebelum penggunaan operasional.
 >
-> **Review oleh admin:** gunakan Review dan koreksi pada dokumen gagal; cocokkan gambar asli dan teks, lalu konfirmasi setiap halaman sebelum membuat indeks.
+> **Review oleh admin:** gunakan Review dan koreksi pada dokumen yang belum lolos; pilih potongan yang ditandai, cocokkan gambar asli dan teks, lalu konfirmasi halaman yang memerlukan review sebelum membuat indeks. Halaman yang sudah lolos otomatis tidak wajib dikonfirmasi ulang.
 
 Review dan koreksi merupakan fitur aktif. Penyiapan draft memakai hasil yang sudah tersedia dan OCR lokal, tanpa API vision. Embedding hasil review tetap menggunakan layanan AI berbayar. Status pemrosesan dan peringatan yang benar-benar dihasilkan pipeline tetap ditampilkan.
 

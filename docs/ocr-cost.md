@@ -16,3 +16,8 @@ Sumber resmi:
 
 - [Tarif GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini)
 - [Aturan token dan biaya input gambar](https://developers.openai.com/api/docs/guides/images-vision)
+
+
+## Perubahan alur berikutnya pada hari yang sama
+
+Estimasi di atas untuk metode dua pembacaan seluruh halaman sebelumnya, bukan tarif pipeline baru. Kini OCR lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada crop yang masih meragukan. Jumlah request lebih bergantung pada kualitas tiap bagian; jangan memakai estimasi lama sebagai jaminan biaya. Mini memakai 60.000 unit reservasi/request, Sol 200.000. Kuota utama tetap 2 juta. Lihat [alur fallback](ocr-fallback.md).

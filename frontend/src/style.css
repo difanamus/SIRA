@@ -1451,6 +1451,11 @@ textarea::placeholder {
   min-width: 1000px;
   max-width: none;
 }
+.review-image.fragment {
+  height: auto;
+  min-height: 0;
+  max-height: 50vh;
+}
 .review-text {
   display: block;
   width: 100%;

@@ -124,3 +124,18 @@ test('stream body and fixed trusted instructions survive the Worker runtime', as
     await mf.dispose();
   }
 });
+
+test('Sol fragments require auth and consume the same persistent total quota', async () => {
+  let sent;
+  const mf = runtime({ MAX_TOKEN_UNITS: '200000' }, (body) => { sent = body; });
+  try {
+    const image = 'data:image/jpeg;base64,YWJj';
+    assert.equal((await post(mf, '/vision-fragment', { image }, 'wrong')).status, 401);
+    assert.equal((await post(mf, '/vision-fragment', { image })).status, 200);
+    assert.equal(sent.model, 'gpt-5.6-sol');
+    assert.equal(sent.reasoning_effort, 'low');
+    const blocked = await post(mf, '/vision-fragment', { image });
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).code, 'relay_budget');
+  } finally { await mf.dispose(); }
+});

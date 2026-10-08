@@ -9,6 +9,10 @@ class AIError(Exception):
     pass
 
 
+class OCRFormatError(AIError):
+    """An unusable transcription, distinct from transport/auth/quota failure."""
+
+
 def upstream_error(status, code=None):
     if status in (401, 403):
         return "Akses layanan AI belum aktif atau sudah berakhir. Silakan hubungi admin."
@@ -68,11 +72,15 @@ class Relay:
         except (KeyError, TypeError, ValueError) as exc:
             raise AIError("Format embedding layanan AI tidak sesuai.") from exc
 
-    def vision(self, image, *, enhanced=False):
+    def vision(self, image, *, enhanced=False, fragment=False):
         payload = {"images": image} if isinstance(image, list) else {"image": image}
         if enhanced:
             payload["enhanced"] = True
-        result = self.post("vision", payload)
+        if fragment:
+            if not isinstance(image, str):
+                raise AIError("Fallback Sol hanya menerima satu potongan gambar.")
+            payload = {"image": image}
+        result = self.post("vision-fragment" if fragment else "vision", payload)
         try:
             choice = result["choices"][0]
             if choice.get("finish_reason") != "stop":
@@ -83,7 +91,7 @@ class Relay:
                 raise ValueError("Invalid OCR result")
             return parsed
         except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise AIError("Hasil bantuan OCR tidak dapat diverifikasi.") from exc
+            raise OCRFormatError("Hasil bantuan OCR tidak dapat diverifikasi.") from exc
 
     async def answer(self, payload):
         try:

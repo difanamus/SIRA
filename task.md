@@ -46,7 +46,7 @@ Aturan penggunaan:
 - [x] Menyiapkan akses pengujian dengan autentikasi, kuota, batas token/rate, masa berlaku, serta pencabutan.
 - [x] Menetapkan batas penggunaan/biaya sebelum akses diberikan kepada penguji.
 - [x] Mengintegrasikan `text-embedding-3-small` untuk dokumen dan pertanyaan.
-- [x] Mengintegrasikan GPT-4o mini untuk jawaban dan bantuan vision.
+- [x] Mengintegrasikan GPT-4o mini untuk jawaban; OCR kini menggunakan GPT-4.1 mini dan fallback GPT-5.6 Sol.
 - [x] Meneruskan streaming OpenAI -> Worker -> FastAPI -> browser tanpa buffering seluruh jawaban.
 - [x] Menangani timeout, rate limit, retry terbatas, dan error tanpa membocorkan rahasia.
 - [x] Memeriksa kompatibilitas ukuran payload vision dengan batas Worker.
@@ -74,7 +74,11 @@ Aturan penggunaan:
 - [x] Menentukan sinyal bantuan AI tanpa menganggap confidence sebagai jaminan kebenaran.
 - [x] Mengintegrasikan bantuan vision selektif dengan transkripsi setia sumber dan penandaan bagian tidak terbaca.
 - [x] Menangani halaman kritis yang belum terbaca tanpa mengaktifkan versi tidak lengkap secara diam-diam.
-- [x] Menambahkan tombol admin **Baca dengan AI** (GPT-4.1 mini khusus scan), dua pembacaan terpisah, mode persisten, dan cache sesuai metode; model chat tetap GPT-4o mini.
+- [x] Menambahkan tombol admin **Baca dengan AI**, pemeriksaan GPT-4.1 mini setelah OCR lokal, mode persisten, dan cache sesuai metode; model chat tetap GPT-4o mini.
+- [x] Menerapkan OCR lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada crop yang masih meragukan, maksimum dua crop per halaman, dengan penyimpanan hasil tiap tahap dan penghentian saat kuota/jaringan gagal.
+- [x] Menjaga batas crop pada sela baris dan garis penuh tabel agar sel gabungan tidak terpisah; preflight lokal 12 halaman SBP berhasil.
+- [x] Menampilkan lokasi/crop bagian bermasalah dan mewajibkan konfirmasi hanya pada halaman yang belum lolos atau diedit admin.
+- [ ] Memverifikasi fallback GPT-5.6 Sol dengan OpenAI nyata; smoke relay masih ditolak kuota total 2 juta, tanpa menaikkan batas.
 - [ ] Memverifikasi hasil 12 halaman scan terhadap sumber, terutama angka, pangkat, pendidikan, tanggal, dan negasi.
 - [x] Menampilkan keterangan akurasi OCR serta rencana pratinjau/koreksi manual secara jelas di admin.
 - [x] Menyediakan review gambar dan editor teks per halaman, draft persisten, konfirmasi admin, serta aktivasi setelah embedding berhasil.
@@ -160,3 +164,4 @@ Aturan penggunaan:
 - 8 Oktober 2026: pengguna menyetujui pembacaan AI untuk scan gagal. Tombol **Baca dengan AI** tersedia; 25 tes backend dan 5 policy + 4 runtime Worker lulus. GPT-4.1 mini hanya untuk mode OCR tersebut, tanpa mengubah model chat, kuota, atau masa aktif relay.
 - 8 Oktober 2026: tombol diuji melalui browser desktop/mobile. GPT-4.1 mini menerima scan halaman 1–4; halaman 3 sudah membaca periode semester dengan benar. Halaman 5 tertahan kuota total relay 2 juta unit, bukan perbedaan OCR. Cache empat halaman berhasil dipakai saat resume. Kenaikan kuota ke 4 juta menunggu persetujuan pengguna. Tes terbaru: 26 backend, 5 policy Worker, 5 runtime Worker lulus; 1 tes live opt-in dilewati.
 - 8 Oktober 2026: permintaan pengguna untuk opsi review sudah diimplementasikan dan diuji di browser desktop/mobile. Seluruh 12 draft SBP tersedia untuk review lokal, 0/12 dikonfirmasi, dokumen belum aktif. Koreksi tersimpan persisten, tab lama ditolak, aktivasi menunggu konfirmasi seluruh halaman serta embedding berhasil. 27 tes backend lulus; 1 live opt-in dilewati. Estimasi biaya OCR tambahan tersedia di `docs/ocr-cost.md`; kuota relay tetap 2 juta.
+- 8 Oktober 2026: alur OCR diperbarui sesuai keputusan pengguna: lokal → GPT-4.1 mini → GPT-5.6 Sol hanya untuk potongan meragukan. Tes akhir 35 backend lulus, 1 live opt-in dilewati; 6 policy dan 6 runtime Worker lulus, build frontend berhasil. UI desktop/mobile diuji pada fixture terpisah: crop, konfirmasi selektif, persistensi koreksi, dan perlindungan draft lulus. Preflight 12 halaman SBP tanpa API berhasil, crop terbesar 20,76%. Relay versi `82503cf1-fb04-4902-aafb-8f9b54fefe40` sudah dideploy dengan kuota/expiry semula. Smoke Sol: tanpa token 401, dengan token 429 `relay_budget` sebelum OpenAI. SBP tetap belum aktif; halaman AI yang sudah lolos dipertahankan, instalasi utama kini menampilkan 0/9 halaman wajib review, tanpa konfirmasi manusia otomatis. Detail `docs/ocr-fallback.md`.

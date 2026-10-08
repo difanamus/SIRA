@@ -35,7 +35,7 @@ test('arbitrary model/role, duplicate source, and oversized input are rejected',
 test('embeddings and vision have fixed models and bounded output', () => {
   assert.equal(prepare('/embeddings', { input: ['Dokumen'] }).body.model, 'text-embedding-3-small');
   const vision = prepare('/vision', { image: 'data:image/jpeg;base64,YWJj' });
-  assert.equal(vision.body.model, 'gpt-4o-mini');
+  assert.equal(vision.body.model, 'gpt-4.1-mini');
   assert.ok(vision.units >= 6000);
 });
 
@@ -52,9 +52,23 @@ test('vision accepts bounded ordered crops and rejects ambiguous or excessive im
 test('enhanced OCR selects only the fixed vision model and cannot change chat', () => {
   const image = 'data:image/jpeg;base64,YWJj';
   assert.equal(prepare('/vision', { image, enhanced: true }).body.model, 'gpt-4.1-mini');
-  assert.equal(prepare('/vision', { image, enhanced: false }).body.model, 'gpt-4o-mini');
+  assert.equal(prepare('/vision', { image, enhanced: false }).body.model, 'gpt-4.1-mini');
   assert.equal(prepare('/answer', payload).body.model, 'gpt-4o-mini');
   assert.throws(() => prepare('/vision', { image, enhanced: 'true' }));
   assert.throws(() => prepare('/vision', { image, model: 'other' }));
   assert.throws(() => prepare('/answer', { ...payload, enhanced: true }));
+});
+
+test('last-resort OCR fixes Sol model, one crop and bounded reasoning/output', () => {
+  const image = 'data:image/jpeg;base64,YWJj';
+  const result = prepare('/vision-fragment', { image });
+  assert.equal(result.body.model, 'gpt-5.6-sol');
+  assert.equal(result.body.reasoning_effort, 'low');
+  assert.equal(result.body.max_completion_tokens, 4000);
+  assert.equal(result.body.temperature, undefined);
+  assert.equal(result.units, 200000);
+  assert.throws(() => prepare('/vision-fragment', { images: [image] }));
+  assert.throws(() => prepare('/vision-fragment', { image, enhanced: true }));
+  assert.throws(() => prepare('/vision-fragment', { image, model: 'other' }));
+  assert.throws(() => prepare('/vision-fragment', { image: image + 'Y'.repeat(2000000) }));
 });
