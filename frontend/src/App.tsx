@@ -6,6 +6,7 @@ import { DocumentReview } from './DocumentReview';
 
 const siraFullName = 'SIRA — Sistem Informasi dan Referensi Aparatur';
 const mascotUrl = new URL('./assets/sira-mascot.png', import.meta.url).href;
+const logoUrl = new URL('./assets/sira-logo.png', import.meta.url).href;
 
 function MascotAvatar({ small = false }: { small?: boolean }) {
   return (
@@ -95,13 +96,13 @@ function Brand({ small = false }: { small?: boolean }) {
   return (
     <div className={'brand ' + (small ? 'brand-small' : '')} title={siraFullName}>
       <span className="brand-mark">
-        <Icon name="shield" size={small ? 22 : 30} />
+        <img src={logoUrl} alt="Logo SIRA" width={62} height={64} />
       </span>
       <div>
         <strong>
           SIRA<span>.</span>
         </strong>
-        <small>ASISTEN INFORMASI SDM POLRI</small>
+        <small>Sistem Informasi dan Referensi Aparatur</small>
       </div>
     </div>
   );
@@ -453,7 +454,7 @@ function Chat({ health }: { health: Health | null }) {
               <MascotAvatar small />
               <div>
                 <strong title={siraFullName}>SIRA</strong>
-                <small>Asisten Informasi SDM Polri</small>
+                <small>Sistem Informasi dan Referensi Aparatur</small>
               </div>
             </div>
             <span className="subtle-tag">{count} dokumen tersedia</span>
@@ -465,8 +466,8 @@ function Chat({ health }: { health: Health | null }) {
               </div>
             ) : messages.length === 0 ? (
               <div className="welcome">
-                <div className="welcome-icon">
-                  <Icon name="chat" size={32} />
+                <div className="welcome-icon mascot-welcome">
+                  <img src={mascotUrl} alt="Maskot SIRA" width={65} height={65} />
                 </div>
                 <span className="eyebrow">SELAMAT DATANG</span>
                 <h2>Ada yang dapat SIRA bantu?</h2>
@@ -810,9 +811,10 @@ function Admin({ health }: { health: Health | null }) {
         <div className="loading-panel">Memeriksa sesi admin...</div>
       ) : !user ? (
         <div className="login-card">
-          <span className="welcome-icon">
-            <Icon name="lock" size={28} />
-          </span>
+          <div className="login-brand">
+            <img src={logoUrl} alt="Logo SIRA" width={112} height={112} />
+            <p className="login-identity">{siraFullName}</p>
+          </div>
           <h2>Masuk sebagai admin</h2>
           <p>Akses pengelolaan dokumen dan pemrosesan knowledge base.</p>
           {health && !health.admin_configured && (
