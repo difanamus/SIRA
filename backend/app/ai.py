@@ -13,6 +13,25 @@ class OCRFormatError(AIError):
     """An unusable transcription, distinct from transport/auth/quota failure."""
 
 
+PRIMARY_VISION_MODEL = "gpt-6-luna"
+
+
+def vision_name(model):
+    for prefix, name in (
+        ("gpt-6-luna", "GPT-6 Luna"),
+        ("gpt-4.1-mini", "GPT-4.1 mini"),
+        ("gpt-5.6-sol", "GPT-5.6 Sol"),
+    ):
+        if model.startswith(prefix):
+            return name
+    return model
+
+
+def vision_method(models, *, sol=False, pipeline="layout-v3"):
+    names = {"6-luna" if model.startswith("gpt-6-luna") else "4.1-mini" for model in models}
+    return "ocr+" + "+".join(sorted(names)) + ("+5.6-sol" if sol else "") + "-" + pipeline
+
+
 def upstream_error(status, code=None):
     if status in (401, 403):
         return "Akses layanan AI belum aktif atau sudah berakhir. Silakan hubungi admin."
@@ -98,9 +117,11 @@ class Relay:
                     or not 1 <= len(parsed["blocks"]) <= 128
                 ):
                     raise ValueError("Invalid document layout")
+                parsed["_model"] = result.get("model", "gpt-5.6-sol" if fragment else PRIMARY_VISION_MODEL)
                 return parsed
             if not isinstance(parsed["text"], str) or not isinstance(parsed["uncertain"], bool):
                 raise ValueError("Invalid OCR result")
+            parsed["_model"] = result.get("model", "gpt-5.6-sol" if fragment else PRIMARY_VISION_MODEL)
             return parsed
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise OCRFormatError("Hasil bantuan OCR tidak dapat diverifikasi.") from exc

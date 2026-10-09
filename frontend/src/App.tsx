@@ -937,7 +937,7 @@ function Admin({ health }: { health: Health | null }) {
               </p>
               <p>
                 Pemeriksaan lokal berjalan tanpa menunggu AI. Halaman yang meragukan dan tabel
-                dibaca langsung dari gambar asli oleh GPT-4.1 mini. Hubungan baris, kolom, dan sel
+                dibaca langsung dari gambar asli oleh GPT-6 Luna. Hubungan baris, kolom, dan sel
                 gabungan ikut diperiksa. GPT-5.6 Sol membaca bagian yang belum jelas; hasil yang
                 tetap meragukan masuk review admin. Bantuan AI berbayar. Model chatbot memakai GPT-6
                 Luna.
@@ -1042,7 +1042,7 @@ function Admin({ health }: { health: Health | null }) {
                       )}
                       {doc.ocr_mode === 'ai' && (
                         <p className="document-meta">
-                          OCR lokal → GPT-4.1 mini → GPT-5.6 Sol untuk bagian meragukan
+                          OCR lokal → GPT-6 Luna → GPT-5.6 Sol untuk bagian meragukan
                         </p>
                       )}
                       {editing === doc.id ? (
@@ -1130,7 +1130,7 @@ function Admin({ health }: { health: Health | null }) {
                               <button
                                 className="text-button"
                                 disabled={busy || !health?.ai_ready}
-                                title="Periksa scan dengan GPT-4.1 mini dan fallback Sol pada potongan meragukan; API berbayar"
+                                title="Periksa scan dengan GPT-6 Luna dan fallback Sol pada potongan meragukan; API berbayar"
                                 onClick={() =>
                                   action(
                                     () =>

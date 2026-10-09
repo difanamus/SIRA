@@ -37,6 +37,18 @@ def test_date_difference_is_advisory_with_real_local_score_and_model_scope():
     assert hints[0]["bbox"][1] >= 0.7
 
 
+def test_saved_model_identity_distinguishes_luna_from_historical_mini():
+    page, regions, plan = evidence()
+    historical = regions[0]["state"]
+    details, _ = page_evidence(page, regions, plan)
+    assert details["regions"][0]["models"] == ["GPT-4.1 mini"]
+    state = json.loads(historical)
+    state["mini_model"] = "gpt-6-luna"
+    regions[0]["state"] = json.dumps(state)
+    details, _ = page_evidence(page, regions, plan)
+    assert details["regions"][0]["models"] == ["GPT-6 Luna"]
+
+
 def test_native_text_has_no_fabricated_score_or_recommendation():
     details, hints = page_evidence({"text": "Teks native", "method": "text"}, [])
     assert details["local_score"] is None and details["regions"] == [] and not hints

@@ -514,27 +514,29 @@ export function DocumentReview({
                     : selected.method === 'ocr-regions-draft' ||
                         selected.method === 'ocr-layout-draft-v3'
                       ? 'Draft OCR bertahap; perlu review'
-                      : selected.method.includes('5.6-sol')
-                        ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'
-                        : selected.method.includes('4.1')
-                          ? 'GPT-4.1 mini'
-                          : selected.method.includes('vision')
-                            ? 'OCR dan AI'
-                            : selected.method.startsWith('ocr')
-                              ? 'OCR lokal'
-                              : selected.method === 'text' || selected.method === 'text-layout-v3'
-                                ? 'PDF teks'
-                                : selected.method === 'blank'
-                                  ? 'Halaman kosong'
-                                  : 'Perlu diisi manual'}{' '}
+                      : selected.method.includes('6-luna')
+                        ? `OCR → ${selected.method.includes('4.1') ? 'GPT-4.1 mini / ' : ''}GPT-6 Luna${selected.method.includes('5.6-sol') ? ' → GPT-5.6 Sol (bagian tertentu)' : ''}`
+                        : selected.method.includes('5.6-sol')
+                          ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'
+                          : selected.method.includes('4.1')
+                            ? 'GPT-4.1 mini'
+                            : selected.method.includes('vision')
+                              ? 'OCR dan AI'
+                              : selected.method.startsWith('ocr')
+                                ? 'OCR lokal'
+                                : selected.method === 'text' || selected.method === 'text-layout-v3'
+                                  ? 'PDF teks'
+                                  : selected.method === 'blank'
+                                    ? 'Halaman kosong'
+                                    : 'Perlu diisi manual'}{' '}
                 · {text.length.toLocaleString('id-ID')} karakter
               </p>
               <p className="review-warning">{selected.warning}</p>
               {!!solParts.length && (
                 <p className="review-warning">
                   Bagian {solParts.map((part) => part.number).join(', ')} sudah diperiksa dengan
-                  GPT-5.6 Sol setelah GPT-4.1 mini, tetapi hasilnya belum lolos verifikasi. Cocokkan
-                  bagian tersebut dengan gambar asli dan perbaiki bila diperlukan.
+                  GPT-5.6 Sol setelah pembacaan AI awal, tetapi hasilnya belum lolos verifikasi.
+                  Cocokkan bagian tersebut dengan gambar asli dan perbaiki bila diperlukan.
                 </p>
               )}
               <label className="review-check">

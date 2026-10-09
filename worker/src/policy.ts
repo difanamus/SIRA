@@ -171,9 +171,9 @@ export function prepare(path: string, value: unknown): Prepared {
     return {
       upstream: 'chat/completions',
       body: {
-        model: fragment ? 'gpt-5.6-sol' : 'gpt-4.1-mini',
+        model: fragment ? 'gpt-5.6-sol' : 'gpt-6-luna',
         store: false,
-        ...(fragment ? { reasoning_effort: 'low' } : { temperature: 0 }),
+        ...(fragment ? { reasoning_effort: 'low' } : { reasoning_effort: 'none', temperature: 0 }),
         max_completion_tokens: layout ? 12000 : fragment ? 4000 : 6000,
         response_format: layout
           ? {

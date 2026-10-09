@@ -21,7 +21,7 @@ import pytesseract
 import tiktoken
 from PIL import ImageFilter, ImageOps
 
-from .ai import AIError, OCRFormatError
+from .ai import PRIMARY_VISION_MODEL, AIError, OCRFormatError, vision_method, vision_name
 from .config import ROOT
 
 log = logging.getLogger("sira.ingestion")
@@ -277,7 +277,7 @@ class RegionalOCR:
                         if self.context:
                             self.owner.update(
                                 self.context[0],
-                                stage=f"{'GPT-5.6 Sol' if fragment else 'GPT-4.1 mini'}: halaman {self.context[1]}, bagian {number}/{len(bounds)}",
+                                stage=f"{'GPT-5.6 Sol' if fragment else vision_name(PRIMARY_VISION_MODEL)}: halaman {self.context[1]}, bagian {number}/{len(bounds)}",
                             )
                         # Network/budget errors propagate; they must never trigger a dearer model.
                         try:
@@ -286,6 +286,9 @@ class RegionalOCR:
                             )
                         except OCRFormatError:
                             state[key] = {"text": "", "uncertain": True}
+                        state[key + "_model"] = state[key].get(
+                            "_model", "gpt-5.6-sol" if fragment else PRIMARY_VISION_MODEL
+                        )
                         self.save(
                             number,
                             top / image.height,
@@ -299,7 +302,8 @@ class RegionalOCR:
                     return state[key]
 
                 first = read("mini", processed)
-                text, method = first["text"], "ocr+4.1-mini-regions-v2"
+                model = state.get("mini_model", "gpt-4.1-mini")
+                text, method = first["text"], vision_method([model], pipeline="regions-v2")
                 agreed = fragment_readable(first) and not self.force_ai and fragments_agree(local, text)
                 if not agreed:
                     second = read("mini_check", crop)
@@ -315,7 +319,7 @@ class RegionalOCR:
                             new_call = "sol" not in state
                             final = read("sol", crop, fragment=True)
                             sol_calls += int(new_call)
-                            text, method = final["text"], "ocr+4.1-mini+5.6-sol-regions-v2"
+                            text, method = final["text"], vision_method([model], sol=True, pipeline="regions-v2")
                             agreed = fragment_readable(final) and any(
                                 candidate["text"].strip() and fragments_agree(text, candidate["text"])
                                 for candidate in (first, second)
@@ -325,7 +329,7 @@ class RegionalOCR:
                 warning += (
                     "masih perlu koreksi admin."
                     if required
-                    else f"diperiksa dengan {'GPT-5.6 Sol setelah GPT-4.1 mini' if '5.6-sol' in method else 'GPT-4.1 mini'}."
+                    else f"diperiksa dengan {('GPT-5.6 Sol setelah ' if '5.6-sol' in method else '') + vision_name(model)}."
                 )
             elif doubtful:
                 required = True
@@ -343,10 +347,15 @@ class RegionalOCR:
             warnings.append("Teks halaman terlalu sedikit; cocokkan dengan gambar asli.")
         if unresolved:
             raise OCRReviewRequired(text, "\n".join(warnings))
+        models = {
+            "gpt-6-luna" if "6-luna" in method else "gpt-4.1-mini"
+            for method in methods
+            if "mini" in method or "6-luna" in method
+        }
         method = (
-            "ocr+4.1-mini+5.6-sol-regions-v2"
-            if any("sol" in value for value in methods)
-            else ("ocr+4.1-mini-regions-v2" if any("4.1" in value for value in methods) else "ocr-local-regions-v2")
+            vision_method(models, sol=any("sol" in value for value in methods), pipeline="regions-v2")
+            if models
+            else "ocr-local-regions-v2"
         )
         return text, method, "\n".join(warnings)
 

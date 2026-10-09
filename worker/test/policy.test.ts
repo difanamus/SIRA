@@ -36,7 +36,8 @@ test('arbitrary model/role, duplicate source, and oversized input are rejected',
 test('embeddings and vision have fixed models and bounded output', () => {
   assert.equal(prepare('/embeddings', { input: ['Dokumen'] }).body.model, 'text-embedding-3-small');
   const vision = prepare('/vision', { image: 'data:image/jpeg;base64,YWJj' });
-  assert.equal(vision.body.model, 'gpt-4.1-mini');
+  assert.equal(vision.body.model, 'gpt-6-luna');
+  assert.equal(vision.body.reasoning_effort, 'none');
   assert.ok(vision.units >= 6000);
 });
 
@@ -52,8 +53,8 @@ test('vision accepts bounded ordered crops and rejects ambiguous or excessive im
 
 test('enhanced OCR selects only the fixed vision model and cannot change chat', () => {
   const image = 'data:image/jpeg;base64,YWJj';
-  assert.equal(prepare('/vision', { image, enhanced: true }).body.model, 'gpt-4.1-mini');
-  assert.equal(prepare('/vision', { image, enhanced: false }).body.model, 'gpt-4.1-mini');
+  assert.equal(prepare('/vision', { image, enhanced: true }).body.model, 'gpt-6-luna');
+  assert.equal(prepare('/vision', { image, enhanced: false }).body.model, 'gpt-6-luna');
   assert.equal(prepare('/answer', payload).body.model, 'gpt-6-luna');
   assert.throws(() => prepare('/vision', { image, enhanced: 'true' }));
   assert.throws(() => prepare('/vision', { image, model: 'other' }));
@@ -78,7 +79,7 @@ test('layout OCR receives image pixels and strict cell spans, never previous tra
   const image = 'data:image/jpeg;base64,YWJj';
   for (const path of ['/vision', '/vision-fragment']) {
     const prepared = prepare(path, { image, layout: true });
-    assert.equal(prepared.body.model, path === '/vision' ? 'gpt-4.1-mini' : 'gpt-5.6-sol');
+    assert.equal(prepared.body.model, path === '/vision' ? 'gpt-6-luna' : 'gpt-5.6-sol');
     const messages = prepared.body.messages as { role: string; content: unknown }[];
     assert.deepEqual(messages[0], { role: 'system', content: LAYOUT_SYSTEM });
     const content = messages[1].content as { type: string; image_url?: { url: string } }[];

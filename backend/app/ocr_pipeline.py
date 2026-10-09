@@ -14,7 +14,7 @@ import numpy as np
 import pdfplumber
 from PIL import ImageFilter, ImageOps
 
-from .ai import AIError, OCRFormatError
+from .ai import PRIMARY_VISION_MODEL, AIError, OCRFormatError, vision_method
 from .ingestion import critical_signature, image_payload, readable, render_page
 from .native_pdf import NATIVE_LAYOUT, find_native_tables, native_layout
 from .ocr_layout import bbox, block_text, detect_tables, overlap, validate_table
@@ -441,6 +441,9 @@ class DocumentOCR:
                         for block in result["blocks"][:128]
                         if isinstance(block, dict) and isinstance(block.get("text"), str)
                     )[:100_000]
+            state[key + "_model"] = (result if isinstance(result, dict) else {}).get(
+                "_model", "gpt-5.6-sol" if sol else PRIMARY_VISION_MODEL
+            )
             state[key + "_input_sha256"] = hashlib.sha256(payload.encode()).hexdigest()
             state[key + "_ms"] = round((time.monotonic() - before) * 1000)
             state[key + "_bbox"] = bounds
@@ -455,6 +458,7 @@ class DocumentOCR:
             self.owner.assert_live(self.id)
             image = None
             texts, unresolved, sol_used, ai_used = [], False, False, False
+            ai_models = set()
             for part, zone in enumerate(plan["zones"], 1):
                 self.owner.assert_live(self.id)
                 prior = self.db.one(
@@ -464,6 +468,8 @@ class DocumentOCR:
                 input_layout = NATIVE_LAYOUT if plan.get("native_source") else "source-zones-v1"
                 if state.get("input_layout") != input_layout:
                     state = {"pipeline": PIPELINE, "input_layout": input_layout}
+                if "mini" in state:
+                    ai_models.add(state.get("mini_model", "gpt-4.1-mini"))
                 requires_table = bool(zone["grid"] or zone.get("table_required"))
                 if state.get("done") and state.get("validator") == VALIDATOR:
                     texts.append(prior["text"])
@@ -494,7 +500,7 @@ class DocumentOCR:
                         bounds,
                         state,
                         text,
-                        "ocr+4.1-mini+5.6-sol-layout-v3",
+                        vision_method([state.get("mini_model", "gpt-4.1-mini")], sol=True),
                         f"Bagian {part}: {problem}" if problem else "",
                         bool(problem),
                     )
@@ -523,7 +529,8 @@ class DocumentOCR:
                         )
                     )
                     result = self.read(number, part, crop, bounds, "mini", state)
-                    method = "ocr+4.1-mini-layout-v3"
+                    ai_models.add(state["mini_model"] if "mini_model" in state else "gpt-4.1-mini")
+                    method = vision_method([state.get("mini_model", "gpt-4.1-mini")])
                     try:
                         blocks = copy.deepcopy(valid_blocks(result))
                     except OCRFormatError:
@@ -581,7 +588,7 @@ class DocumentOCR:
                                 )
                             )
                             final = self.read(number, part, sol_crop, sol_bounds, "sol", state, sol=True)
-                            method, sol_used = "ocr+4.1-mini+5.6-sol-layout-v3", True
+                            method, sol_used = vision_method([state.get("mini_model", "gpt-4.1-mini")], sol=True), True
                             try:
                                 replacements = copy.deepcopy(valid_blocks(final))
                                 if requires_table and sum(b["kind"] == "table" for b in replacements) != 1:
@@ -623,7 +630,7 @@ class DocumentOCR:
                 else:
                     method = "ocr-local-layout-v3"
                     if ai_used:
-                        method = "ocr+4.1-mini+5.6-sol-layout-v3" if sol_used else "ocr+4.1-mini-layout-v3"
+                        method = vision_method(ai_models, sol=sol_used)
                     self.page(number, text, method)
         except AIError as exc:
             with self.lock:

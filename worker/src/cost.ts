@@ -14,7 +14,7 @@ export function reserveCost(prepared: Prepared): number {
   const model = String(prepared.body.model);
   // Vision inputs are patch/tile capped by these fixed models. These allowances
   // exceed the bounded two-image mini / one-image Sol inputs and output limits.
-  if (model === 'gpt-4.1-mini' && !prepared.streaming)
+  if ((model === 'gpt-4.1-mini' || model === 'gpt-6-luna') && !prepared.streaming)
     return Number(prepared.body.max_completion_tokens) > 6000 ? 30000 : 15000;
   if (model === 'gpt-5.6-sol')
     return Number(prepared.body.max_completion_tokens) > 4000 ? 300000 : 150000;
@@ -33,7 +33,7 @@ export function actualCost(prepared: Prepared, packet: unknown): number | null {
       usage?: {
         prompt_tokens?: number;
         completion_tokens?: number;
-        prompt_tokens_details?: { cached_tokens?: number };
+        prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
       };
     }
   )?.usage;
@@ -42,15 +42,27 @@ export function actualCost(prepared: Prepared, packet: unknown): number | null {
   const prompt = usage.prompt_tokens!;
   const completion = usage.completion_tokens ?? 0;
   const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
+  const writes =
+    String(prepared.body.model) === 'gpt-6-luna'
+      ? (usage.prompt_tokens_details?.cache_write_tokens ?? 0)
+      : 0;
   if (
     !Number.isSafeInteger(completion) ||
     completion < 0 ||
     !Number.isSafeInteger(cached) ||
     cached < 0 ||
-    cached > prompt
+    cached > prompt ||
+    !Number.isSafeInteger(writes) ||
+    writes < 0 ||
+    cached + writes > prompt
   )
     return null;
   const [input, cache, output] = rates[String(prepared.body.model)];
   // completion_tokens already includes reasoning tokens.
-  return Math.ceil((prompt - cached) * input + cached * cache + completion * output);
+  return Math.ceil(
+    (prompt - cached - writes) * input +
+      cached * cache +
+      writes * input * 1.25 +
+      completion * output,
+  );
 }

@@ -82,7 +82,7 @@ def test_mini_agrees_with_local_without_calling_sol(tmp_path, monkeypatch):
     ai = Vision([answer()])
     owner, _ = ingestion(tmp_path, ai, monkeypatch)
     text, method, _ = owner.extract_scan(scan_image())
-    assert text.startswith(HARD) and "4.1-mini" in method
+    assert text.startswith(HARD) and "6-luna" in method
     assert [call[0] for call in ai.calls] == [False]
 
 
@@ -194,7 +194,7 @@ def test_relay_fragment_uses_fixed_route_and_rejects_whole_page_array(monkeypatc
         return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(answer())}}]}
 
     monkeypatch.setattr(relay, "post", post)
-    assert relay.vision("data:image/jpeg;base64,YWJj", fragment=True) == answer()
+    assert relay.vision("data:image/jpeg;base64,YWJj", fragment=True) == {**answer(), "_model": "gpt-5.6-sol"}
     assert sent == [("vision-fragment", {"image": "data:image/jpeg;base64,YWJj"})]
     with pytest.raises(AIError):
         relay.vision(["image", "image"], fragment=True)

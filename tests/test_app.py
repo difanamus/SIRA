@@ -510,7 +510,7 @@ def test_manual_review_lifecycle_auth_stale_edits_blank_and_atomic_activation(ha
     assert doc["active_version"] == previous and ai.embeddings == embeddings_before
     review = client.get(base).json()
     assert [p["required"] for p in review["pages"]] == [0, 1, 1]
-    assert review["pages"][0]["method"] == "ocr+4.1-mini-layout-v3"
+    assert review["pages"][0]["method"] == "ocr+6-luna-layout-v3"
     version = {"version_id": review["version_id"]}
     assert client.post(base + "/activate", json=version).status_code == 409
     image = client.get(base + "/pages/1/image", params=version)
@@ -596,9 +596,9 @@ def test_automatic_review_requires_only_unresolved_page_and_preview_crop(harness
     assert len(calls) == 4 and ready["available"] == 1
     pages = ctx.db.rows("SELECT * FROM pages WHERE version_id=? ORDER BY number", (ready["active_version"],))
     assert [page["method"] for page in pages] == [
-        "ocr+4.1-mini-layout-v3",
+        "ocr+6-luna-layout-v3",
         "manual-reviewed-v1",
-        "ocr+4.1-mini-layout-v3",
+        "ocr+6-luna-layout-v3",
     ]
 
 

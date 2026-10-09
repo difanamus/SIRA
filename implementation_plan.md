@@ -31,7 +31,7 @@ Kedua dokumen pedoman tidak otomatis menjadi knowledge base. Instalasi baru dimu
 - Tambah dokumen, ubah metadata, ganti file dokumen, dan hapus dokumen.
 - Penyimpanan persisten untuk PDF, hasil ekstraksi, metadata, serta embedding/index.
 - Pipeline parsing, OCR bila diperlukan, chunking, embedding, retrieval, dan generasi jawaban.
-- GPT-6 Luna sebagai satu-satunya model jawaban. OCR: lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada potongan yang masih meragukan (keputusan OCR 8 Oktober 2026; model jawaban diperbarui 10 Oktober 2026).
+- GPT-6 Luna sebagai satu-satunya model jawaban. OCR: lokal → GPT-6 Luna → GPT-5.6 Sol hanya pada potongan yang masih meragukan (model jawaban dan pembaca gambar diperbarui 10 Oktober 2026).
 - Konteks dan riwayat satu percakapan persisten untuk pertanyaan lanjutan; dipulihkan saat refresh/buka ulang dan dihapus hanya melalui Percakapan baru (keputusan pengguna 8 Oktober 2026).
 - Jawaban sopan dan profesional, disertai referensi dokumen berupa teks biasa.
 - Jawaban streaming dan penanganan kesalahan yang dapat dipahami pengguna.
@@ -63,7 +63,7 @@ Tidak ada link PDF atau fasilitas download dokumen untuk pengguna chat. Tanpa kl
 | Preprocessing | Pillow/OpenCV sesuai kebutuhan | Rotasi, deskew, kontras, dan penyesuaian gambar tanpa mengubah substansi |
 | Tokenisasi | tiktoken | Pengukuran ukuran chunk dan anggaran konteks |
 | Model jawaban | OpenAI GPT-6 Luna | Jawaban berbasis evidence |
-| OCR AI | GPT-4.1 mini, fallback GPT-5.6 Sol | Mini memeriksa scan; Sol hanya potongan yang masih meragukan |
+| OCR AI | GPT-6 Luna, fallback GPT-5.6 Sol | Luna memeriksa scan; Sol hanya potongan yang masih meragukan |
 | Model embedding | OpenAI text-embedding-3-small | Embedding chunk dan pertanyaan |
 | Relay AI | Cloudflare Workers, TypeScript, Secrets | Menjaga API key OpenAI di server dan membatasi permintaan AI |
 | Streaming | HTTP streaming/SSE | Mengirim respons bertahap sampai UI |
@@ -90,7 +90,7 @@ Cloudflare Worker milik peserta
   |-- Autentikasi akses pengujian, batas penggunaan, validasi operasi/model
   |-- API key OpenAI melalui Secrets
   |
-OpenAI: embedding, GPT-6 Luna untuk chat, GPT-4.1 mini dan fallback GPT-5.6 Sol untuk OCR
+OpenAI: embedding, GPT-6 Luna untuk chat, GPT-6 Luna dan fallback GPT-5.6 Sol untuk OCR
 ```
 
 - UI dan backend aplikasi dijalankan pada localhost; hasil build React dilayani FastAPI agar penguji tidak perlu menjalankan server frontend terpisah.
@@ -149,7 +149,7 @@ Urutan pemrosesan:
 3. Ekstrak teks per halaman. PDF campuran diputuskan per halaman, bukan berdasarkan seluruh file.
 4. Untuk halaman scan atau ekstraksi yang tidak memadai, render gambar dengan resolusi yang sesuai, lakukan preprocessing yang diperlukan, lalu jalankan OCR lokal.
 5. Tentukan bagian yang membutuhkan bantuan AI menggunakan gabungan sinyal: teks kosong/terlalu sedikit, karakter rusak, confidence OCR, tata letak sulit, tabel, dan ketidaksesuaian hasil ekstraksi.
-6. Producer lokal memeriksa seluruh dokumen tanpa menunggu AI, menandai tabel/kolom kompleks/teks meragukan, dan menyimpan rencana. Tiga worker AI membaca gambar asli secara mandiri melalui GPT-4.1 mini; tanpa transkripsi OCR sebelumnya. Tabel utuh menggunakan struktur sel/span, dengan validasi geometri dan record baris atomik saat indexing. GPT-5.6 Sol membaca hanya area yang masih bermasalah. Hasil tetap ragu masuk review selektif, dengan opsi review keseluruhan; hasil persisten digunakan saat resume. Detail `docs/ocr-fallback.md`.
+6. Producer lokal memeriksa seluruh dokumen tanpa menunggu AI, menandai tabel/kolom kompleks/teks meragukan, dan menyimpan rencana. Tiga worker AI membaca gambar asli secara mandiri melalui GPT-6 Luna; tanpa transkripsi OCR sebelumnya. Tabel utuh menggunakan struktur sel/span, dengan validasi geometri dan record baris atomik saat indexing. GPT-5.6 Sol membaca hanya area yang masih bermasalah. Hasil tetap ragu masuk review selektif, dengan opsi review keseluruhan; hasil persisten digunakan saat resume. Detail `docs/ocr-fallback.md`.
 7. Jika hasil tetap tidak terbaca atau perbedaan kritis belum terselesaikan, tampilkan peringatan/kegagalan yang jujur. Jangan mengaktifkan versi sebagai knowledge base siap jika halaman penting belum berhasil diproses.
 8. Simpan teks, asal halaman, metode ekstraksi, dan peringatan. Hilangkan header/footer berulang secara hati-hati tanpa membuang makna pasal atau persyaratan.
 9. Pecah teks berdasarkan struktur bagian/pasal/persyaratan, lalu batas token. Pertahankan hubungan butir, negasi, angka, dan header tabel.
@@ -322,8 +322,7 @@ Tidak ada keputusan produk yang menghalangi penyusunan rencana atau tahap fondas
 - Vite build: https://vite.dev/guide/build
 - Chroma PersistentClient: https://docs.trychroma.com/reference/python/client
 - Tesseract dan kualitas OCR: https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html
-- GPT-6 Luna untuk jawaban: https://developers.openai.com/api/docs/models/gpt-6-luna
-- GPT-4.1 mini, khusus opsi admin Baca dengan AI untuk scan gagal (disetujui 8 Oktober 2026): https://developers.openai.com/api/docs/models/gpt-4.1-mini
+- GPT-6 Luna untuk jawaban dan pembacaan gambar (diperbarui 10 Oktober 2026): https://developers.openai.com/api/docs/models/gpt-6-luna
 - Model embedding: https://developers.openai.com/api/docs/models/text-embedding-3-small
 - OpenAI images/vision: https://developers.openai.com/api/docs/guides/images-vision
 - Cloudflare Secrets: https://developers.cloudflare.com/workers/configuration/secrets/

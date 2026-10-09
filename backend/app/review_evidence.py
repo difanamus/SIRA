@@ -3,6 +3,7 @@
 import json
 import re
 
+from .ai import vision_name
 from .ocr_pipeline import source_bounds
 from .review_hints import review_hints, text_position
 
@@ -49,7 +50,11 @@ def page_evidence(page, regions, plan=None):
             or "[TIDAK TERBACA]" in b.get("text", "")
             for b in blocks
         )
-        models = [name for key, name in (("mini", "GPT-4.1 mini"), ("sol", "GPT-5.6 Sol")) if key in state]
+        models = [
+            vision_name(state.get(key + "_model", default))
+            for key, default in (("mini", "gpt-4.1-mini"), ("sol", "gpt-5.6-sol"))
+            if key in state
+        ]
         local_score = score(local_words)
         if local_score is None:
             value = state.get("local", {}).get("confidence")

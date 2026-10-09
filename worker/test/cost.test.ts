@@ -11,9 +11,31 @@ test('Luna chat reserves text and cache-write costs while vision keeps its image
   });
   const bytes = new TextEncoder().encode(JSON.stringify(chat.body)).length;
   assert.equal(reserveCost(chat), Math.ceil((bytes + 512) * 0.125 + 1800 * 0.5));
-  assert.equal(actualCost(chat, {
-    usage: { prompt_tokens: 1000, completion_tokens: 100 },
-  }), 150);
+  assert.equal(
+    actualCost(chat, {
+      usage: { prompt_tokens: 1000, completion_tokens: 100 },
+    }),
+    150,
+  );
+  assert.equal(
+    actualCost(chat, {
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 100,
+        prompt_tokens_details: { cached_tokens: 400, cache_write_tokens: 200 },
+      },
+    }),
+    119,
+  );
+  assert.equal(
+    actualCost(chat, {
+      usage: {
+        prompt_tokens: 1000,
+        prompt_tokens_details: { cached_tokens: 800, cache_write_tokens: 201 },
+      },
+    }),
+    null,
+  );
   const image = 'data:image/jpeg;base64,YWJj';
   assert.equal(reserveCost(prepare('/vision', { image })), 15000);
   assert.equal(reserveCost(prepare('/vision', { image, layout: true })), 30000);

@@ -354,6 +354,30 @@ def test_structured_relay_transmits_only_images_and_fixed_flag(tmp_path, monkeyp
     ]
 
 
+def test_new_read_records_luna_but_paid_mini_checkpoint_keeps_its_identity(tmp_path, monkeypatch):
+    from backend.app.ai import vision_method
+
+    calls = []
+
+    class AI:
+        def vision(self, image, **kwargs):
+            calls.append(kwargs)
+            return {"blocks": [text_block()], "_model": "gpt-6-luna"}
+
+    instance, version = owner(tmp_path, monkeypatch, AI())
+    reader = DocumentOCR(instance, version)
+    state = {}
+    picture = Image.new("RGB", (600, 600), "white")
+    reader.read(1, 1, picture, [0, 0, 1, 1], "mini", state)
+    assert state["mini_model"] == "gpt-6-luna" and len(calls) == 1
+    reader.read(1, 1, picture, [0, 0, 1, 1], "mini", state)
+    assert len(calls) == 1
+    legacy = {"mini": {"blocks": [text_block()]}}
+    reader.read(1, 1, picture, [0, 0, 1, 1], "mini", legacy)
+    assert len(calls) == 1 and "mini_model" not in legacy
+    assert vision_method([legacy.get("mini_model", "gpt-4.1-mini")]) == "ocr+4.1-mini-layout-v3"
+
+
 def test_revalidation_reuses_paid_results_and_preserves_uncertain_sol(tmp_path, monkeypatch):
     calls = []
 

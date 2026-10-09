@@ -1,6 +1,6 @@
 # Relay pengujian Cloudflare
 
-Petunjuk ini untuk peserta/pemilik akun. Penguji cukup memasang aplikasi lokal dan menerima akses relay. Model yang ditetapkan server: GPT-6 Luna untuk jawaban, GPT-4.1 mini untuk bantuan OCR, GPT-5.6 Sol untuk fallback crop meragukan, dan text-embedding-3-small untuk embedding. Klien tidak dapat menentukan model arbitrer. Atas permintaan pemilik pada 8 Oktober 2026, batas kumulatif request, unit, dan biaya aplikasi dinonaktifkan; autentikasi, proteksi spam per menit, serta masa berlaku tetap aktif.
+Petunjuk ini untuk peserta/pemilik akun. Penguji cukup memasang aplikasi lokal dan menerima akses relay. Model yang ditetapkan server: GPT-6 Luna untuk jawaban, GPT-6 Luna untuk bantuan OCR, GPT-5.6 Sol untuk fallback crop meragukan, dan text-embedding-3-small untuk embedding. Klien tidak dapat menentukan model arbitrer. Atas permintaan pemilik pada 8 Oktober 2026, batas kumulatif request, unit, dan biaya aplikasi dinonaktifkan; autentikasi, proteksi spam per menit, serta masa berlaku tetap aktif.
 
 ## Setup dengan skrip
 
@@ -37,7 +37,7 @@ Jika deployment awal gagal, skrip berhenti sebelum mengaktifkan akses. Jika pema
 
 Dengan `TOTAL_QUOTA_ENABLED = "false"`, nilai `MAX_REQUESTS`, `MAX_TOKEN_UNITS`, dan `RUN_BUDGET_*` tidak memblokir chat, OCR, atau embedding. Penghitung historis tidak dihapus. Pemakaian tetap ditagihkan oleh OpenAI sesuai akun pemilik; batas/saldo dari penyedia tetap berlaku. Proteksi 30 request/menit membatasi lonjakan sesaat dan tidak menghabiskan jatah kumulatif.
 
-Bagian anggaran berikut menjelaskan mode uji opsional saat `TOTAL_QUOTA_ENABLED` diaktifkan kembali. Unit reservasi bukan hitungan token tagihan atau batas dolar yang presisi. Teks menggunakan ukuran byte UTF-8 ditambah reservasi output; vision GPT-4.1 mini menggunakan 60000 unit per request, fallback potongan GPT-5.6 Sol menggunakan 200000. Request gagal setelah reservasi tetap mengurangi jatah. Penghitung disimpan pada Durable Object dan tidak direset hanya dengan redeploy atau mengganti tanggal/token.
+Bagian anggaran berikut menjelaskan mode uji opsional saat `TOTAL_QUOTA_ENABLED` diaktifkan kembali. Unit reservasi bukan hitungan token tagihan atau batas dolar yang presisi. Teks menggunakan ukuran byte UTF-8 ditambah reservasi output; vision GPT-6 Luna menggunakan 60000 unit per request, fallback potongan GPT-5.6 Sol menggunakan 200000. Request gagal setelah reservasi tetap mengurangi jatah. Penghitung disimpan pada Durable Object dan tidak direset hanya dengan redeploy atau mengganti tanggal/token.
 
 Biaya Cloudflare/OpenAI mengikuti akun pemilik. Vision untuk scan dapat menghabiskan kuota lebih cepat daripada chat sederhana. Nilai batas tersedia untuk diubah sebelum pemberian akses penguji.
 
@@ -59,7 +59,7 @@ Untuk mengganti token, buat token baru lokal dengan skrip generator (menolak ove
 
 ## Batas kepercayaan
 
-Relay hanya menerima `POST /embeddings`, `/answer`, `/vision` (GPT-4.1 mini), dan `/vision-fragment` (GPT-5.6 Sol, satu JPEG maksimal payload 2 MB), dengan skema terbatas. Model, endpoint OpenAI, instruksi sistem, dan anggaran output ditetapkan di Worker. Tidak ada arbitrary URL proxy atau model dari klien. Tidak ada CORS browser publik; backend lokal yang menghubungi relay. Pembatasan luas crop dan jumlah eskalasi per halaman dilakukan backend.
+Relay hanya menerima `POST /embeddings`, `/answer`, `/vision` (GPT-6 Luna), dan `/vision-fragment` (GPT-5.6 Sol, satu JPEG maksimal payload 2 MB), dengan skema terbatas. Model, endpoint OpenAI, instruksi sistem, dan anggaran output ditetapkan di Worker. Tidak ada arbitrary URL proxy atau model dari klien. Tidak ada CORS browser publik; backend lokal yang menghubungi relay. Pembatasan luas crop dan jumlah eskalasi per halaman dilakukan backend.
 
 Pemilik PC dapat mengekstrak token relay lokal. Perlindungan akses penguji berupa masa berlaku, batas operasi, rate limit, dan pencabutan. Token tersebut tidak memberikan akses Cloudflare Dashboard atau API key OpenAI. Tanpa kuota total aplikasi, token yang masih berlaku dapat terus memicu biaya; ini adalah pilihan pemilik untuk prototype ini.
 

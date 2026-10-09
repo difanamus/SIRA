@@ -245,7 +245,7 @@ test('Sol fragments require auth and consume the same persistent total quota', a
 test('server cost budget settles actual usage, rejects before upstream and cannot be overridden', async () => {
   let calls = 0;
   const mf = runtime(
-    { RUN_BUDGET_ID: 'bounded-run', RUN_BUDGET_MICRO_USD: '17000' },
+    { RUN_BUDGET_ID: 'bounded-run', RUN_BUDGET_MICRO_USD: '16000' },
     () => calls++,
   );
   try {
