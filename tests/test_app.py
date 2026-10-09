@@ -113,6 +113,85 @@ def test_empty_kb_and_session_do_not_call_ai(harness):
     assert ctx.db.active_versions() == []
 
 
+def test_ready_document_optional_review_copies_evidence_without_ai_and_keeps_active(harness):
+    from backend.app.db import Database
+
+    client, ctx, ai, settings = harness
+    response = client.post(
+        "/api/admin/documents",
+        data={"title": "Review aktif"},
+        files={"file": ("uji.pdf", pdf_bytes(pages=2), "application/pdf")},
+    )
+    doc_id = response.json()["id"]
+    active = wait_document(ctx, doc_id)["active_version"]
+    saved, original = "19 September 2026", "14 September 2026"
+    ctx.db.execute(
+        "UPDATE pages SET text=?,method='ocr+4.1-mini-layout-v3' WHERE version_id=? AND number=2", (saved, active)
+    )
+    plan = {
+        "words": [{"text": "14", "confidence": 77, "bbox": [0.6, 0.8, 0.7, 0.82]}],
+        "zones": [{"bbox": [0, 0.7, 1, 1], "text": original}],
+    }
+    ctx.db.execute("INSERT OR REPLACE INTO ocr_page_jobs VALUES (?,?,?,'done',1)", (active, 2, json.dumps(plan)))
+    state = {"mini": {"blocks": [{"text": saved, "uncertain": False}]}}
+    ctx.db.execute(
+        "INSERT INTO ocr_regions VALUES (?,?,1,0.7,1,?,?,?,'',0)",
+        (active, 2, json.dumps(state), saved, "ocr+4.1-mini-layout-v3"),
+    )
+    summary = client.get("/api/admin/documents").json()[0]["verification"]
+    assert summary == {"accepted_pages": 2, "recommended_parts": 1, "local_score": 77, "scored_pages": 1}
+    before = ai.embeddings
+    kb_revision = ctx.db.revision
+    base = f"/api/admin/documents/{doc_id}/review"
+    assert client.post(base, headers={"X-CSRF-Token": "wrong"}).status_code == 403
+    response = client.post(base)
+    assert response.status_code == 200
+    version = {"version_id": response.json()["version_id"]}
+    assert version["version_id"] != active
+    assert client.post(base).json() == response.json()  # Reopen the persistent draft.
+    review = client.get(base).json()
+    assert review["optional"] and review["active_available"]
+    assert [p["required"] for p in review["pages"]] == [0, 0]
+    assert [p["recommended"] for p in review["pages"]] == [False, True]
+    assert review["pages"][1]["evidence"]["regions"][0]["models"] == ["GPT-4.1 mini"]
+    hint = review["pages"][1]["hints"][0]["id"]
+    assert client.get(base + "/pages/2/image", params={**version, "hint": hint}).status_code == 200
+    assert client.get(base + "/pages/2/image", params={**version, "hint": "missing"}).status_code == 404
+    assert ctx.db.active_versions() == [active] and ctx.db.revision == kb_revision and ai.embeddings == before
+    draft = {**version, "revision": 0, "text": original, "confirmed": False}
+    assert client.put(base + "/pages/2", json=draft).status_code == 200
+    assert client.put(base + "/pages/2", json=draft).status_code == 409
+    assert client.post(base + "/activate", json=version).status_code == 409
+    draft.update(revision=1, confirmed=True)
+    assert client.put(base + "/pages/2", json=draft).status_code == 200
+    reopened = Database(settings.data_dir)
+    reopened.recover()
+    assert reopened.document_list()[0]["review_source"] == active
+    assert (
+        reopened.one("SELECT text FROM review_pages WHERE version_id=? AND number=2", (version["version_id"],))["text"]
+        == original
+    )
+    assert client.get(base).json()["pages"][1]["hints"] == []
+    ai.fail = True
+    assert client.post(base + "/activate", json=version).status_code == 200
+    failed = wait_document(ctx, doc_id, "failed")
+    assert failed["active_version"] == active and failed["available"]
+    ai.fail = False
+    assert client.post(f"/api/admin/documents/{doc_id}/retry").status_code == 200
+    ready = wait_document(ctx, doc_id)
+    assert ready["active_version"] == version["version_id"] and ctx.db.revision == kb_revision + 1
+    assert (
+        ctx.db.one("SELECT text FROM pages WHERE version_id=? AND number=2", (ready["active_version"],))["text"]
+        == original
+    )
+    assert client.get(base).status_code == 409
+    assert client.get(base + "/pages/2/image", params=version).status_code == 409
+    assert client.get("/api/admin/documents").json()[0]["verification"]["recommended_parts"] == 0
+    assert client.post(base).status_code == 200  # Ready documents remain reviewable after a correction.
+    client.cookies.clear()
+    assert client.get(base).status_code == 401
+
+
 def test_chat_history_and_followup_survive_idle_cache_loss_and_app_restart(harness):
     client, ctx, ai, settings = harness
     wait_document(ctx, upload(client))

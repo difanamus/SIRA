@@ -1,6 +1,6 @@
 # Checklist Pengerjaan SIRA
 
-Terakhir diperbarui: 8 Oktober 2026.
+Terakhir diperbarui: 9 Oktober 2026.
 
 Pedoman detail: [implementation_plan.md](implementation_plan.md).
 
@@ -166,6 +166,8 @@ Aturan penggunaan:
 - [ ] Daftar beberapa percakapan, sinkronisasi riwayat antarperangkat, dan pengelolaan banyak akun/admin.
 
 ## Catatan progres
+
+- [x] 9 Oktober 2026: review opsional dokumen aktif, indikator OCR lokal dari bukti tersimpan, rincian model/keraguan per area, rekomendasi perbedaan tanggal, dan draft persisten ditambahkan tanpa perubahan pipeline OCR/chat/retrieval. Membuka review tidak memanggil AI atau embedding; publikasi memakai alur indeks manual yang sudah ada dan menjaga versi aktif sampai sukses. Schema 7 hanya menambahkan penanda sumber review. 72 tes backend lulus, 1 tes live dilewati; Ruff/build frontend serta UI desktop 1440×1000/mobile 390×844 lulus. Bukti dan batasan: `docs/active-document-review.md`. Isi dua KB utama tidak dikoreksi otomatis.
 
 - 9 Oktober 2026: UI chat desktop diringkas melalui CSS saja: topbar 44 piksel, header SIRA/tombol Percakapan baru disatukan, judul berulang serta panel keterangan kanan disembunyikan, dan chat mengikuti tinggi viewport. Pada 1440×900 area pesan naik dari sekitar 446 menjadi 642 piksel dan lebar 867 menjadi 1152 piksel. Verifikasi browser pada 1920×1080, 1440×900, 1280×720, 900×600, dan 721×600 lulus; input tetap terlihat tanpa overflow halaman. Ukuran layout mobile 390×650 identik dengan sebelum perubahan; navigasi admin/chat baru lulus memakai fixture tanpa biaya AI. Build frontend dan Prettier lulus; tidak ada perubahan logika aplikasi.
 

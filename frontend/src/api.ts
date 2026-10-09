@@ -43,4 +43,11 @@ export type Doc = {
   available: number;
   pending_version: string | null;
   ocr_mode: 'auto' | 'ai' | 'review' | 'manual';
+  review_source?: string | null;
+  verification?: {
+    accepted_pages: number;
+    recommended_parts: number;
+    local_score: number | null;
+    scored_pages: number;
+  };
 };

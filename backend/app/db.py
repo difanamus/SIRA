@@ -32,6 +32,8 @@ class Database:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(versions)")}
             if "ocr_mode" not in columns:
                 conn.execute("ALTER TABLE versions ADD COLUMN ocr_mode TEXT NOT NULL DEFAULT 'auto'")
+            if "review_source" not in columns:
+                conn.execute("ALTER TABLE versions ADD COLUMN review_source TEXT")
             review_columns = {row["name"] for row in conn.execute("PRAGMA table_info(review_pages)")}
             if "required" not in review_columns:
                 conn.execute("ALTER TABLE review_pages ADD COLUMN required INTEGER NOT NULL DEFAULT 1")
@@ -41,7 +43,7 @@ class Database:
                     SELECT 1 FROM pages p WHERE p.version_id=review_pages.version_id
                     AND p.number=review_pages.number AND p.text=review_pages.text
                     AND (p.method IN ('text','blank','manual-reviewed-v1') OR p.method LIKE '%ai-4.1-mini-crops-v1'))""")
-            conn.execute("UPDATE meta SET value=6 WHERE key='schema_version' AND value<6")
+            conn.execute("UPDATE meta SET value=7 WHERE key='schema_version' AND value<7")
 
     @contextmanager
     def connect(self):
@@ -90,7 +92,7 @@ class Database:
 
     def document_list(self):
         return self.rows("""SELECT d.id,d.title,d.filename,d.active_version,d.pending_version,d.created,
-            v.status,v.stage,v.progress,v.page_count,v.warning,v.error,v.size,v.ocr_mode,
+            v.status,v.stage,v.progress,v.page_count,v.warning,v.error,v.size,v.ocr_mode,v.review_source,
             CASE WHEN d.active_version IS NOT NULL THEN 1 ELSE 0 END AS available
             FROM documents d LEFT JOIN versions v ON v.id=COALESCE(d.pending_version,d.active_version)
             WHERE d.deleted=0 ORDER BY d.created DESC""")

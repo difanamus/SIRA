@@ -1,6 +1,5 @@
 import asyncio
 import io
-import json
 import logging
 import secrets
 import shutil
@@ -23,7 +22,7 @@ from .chat import Chat
 from .config import ROOT, Settings
 from .db import Database
 from .ingestion import Ingestion, render_page, save_upload
-from .review_hints import review_hints
+from .review_evidence import review_page, verification_summary
 from .security import Limiter, check_origin, digest, hasher, require_admin, verify_password
 from .vectors import VectorStore
 
@@ -213,9 +212,21 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         response.delete_cookie("sira_admin", path="/api/admin")
         return {"ok": True}
 
+    verification_cache = {}
+
     @app.get("/api/admin/documents", tags=["Dokumen"], dependencies=[Depends(require_admin)])
     def list_documents(request: Request):
-        return request.app.state.ctx.db.document_list()
+        ctx = request.app.state.ctx
+        documents = ctx.db.document_list()
+        for doc in documents:
+            active = doc["active_version"]
+            if active:
+                if active not in verification_cache:
+                    if len(verification_cache) >= 128:
+                        verification_cache.clear()
+                    verification_cache[active] = verification_summary(ctx.db, active)
+                doc["verification"] = verification_cache[active]
+        return documents
 
     @app.post("/api/admin/check-ai", tags=["Admin"], dependencies=[Depends(require_admin)])
     def check_ai(request: Request):
@@ -363,6 +374,52 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
     def prepare_document_review(document_id: str, request: Request):
         ctx = request.app.state.ctx
         with ctx.mutation_lock:
+            doc = ctx.db.one("SELECT * FROM documents WHERE id=? AND deleted=0", (document_id,))
+            if doc and not doc["pending_version"] and doc["active_version"]:
+                # Snapshot accepted text and evidence; opening optional review
+                # never runs OCR, embeddings, or replaces the active version.
+                active = ctx.db.one("SELECT * FROM versions WHERE id=?", (doc["active_version"],))
+                version_id = uuid.uuid4().hex
+                path = settings.data_dir / "documents" / (version_id + ".pdf")
+                try:
+                    shutil.copyfile(active["path"], path)
+                    with ctx.db.connect() as conn:
+                        conn.execute(
+                            "INSERT INTO versions(id,document_id,path,sha256,size,status,ocr_mode,created,page_count,stage,progress,review_source) "
+                            "VALUES (?,?,?,?,?,'review','review',?,?,'Review opsional',100,?)",
+                            (
+                                version_id,
+                                document_id,
+                                str(path),
+                                active["sha256"],
+                                active["size"],
+                                time.time(),
+                                active["page_count"],
+                                active["id"],
+                            ),
+                        )
+                        conn.execute(
+                            "INSERT INTO pages SELECT ?,number,text,method,warning FROM pages WHERE version_id=?",
+                            (version_id, active["id"]),
+                        )
+                        conn.execute(
+                            "INSERT INTO review_pages(version_id,number,text,method,warning,required) "
+                            "SELECT ?,number,text,method,warning,0 FROM pages WHERE version_id=?",
+                            (version_id, active["id"]),
+                        )
+                        conn.execute(
+                            "INSERT INTO ocr_regions SELECT ?,page,number,top,bottom,state,text,method,warning,required FROM ocr_regions WHERE version_id=?",
+                            (version_id, active["id"]),
+                        )
+                        conn.execute(
+                            "INSERT INTO ocr_page_jobs SELECT ?,page,plan,status,elapsed_ms FROM ocr_page_jobs WHERE version_id=?",
+                            (version_id, active["id"]),
+                        )
+                        conn.execute("UPDATE documents SET pending_version=? WHERE id=?", (version_id, document_id))
+                except BaseException:
+                    path.unlink(missing_ok=True)
+                    raise
+                return {"ok": True, "version_id": version_id}
             version = pending_review(ctx, document_id)
             if version["status"] == "review" or (version["status"] == "processing" and version["ocr_mode"] == "review"):
                 return {"ok": True, "version_id": version["id"]}
@@ -384,35 +441,17 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
             "SELECT number,text,method,warning,confirmed,revision,required FROM review_pages WHERE version_id=? ORDER BY number",
             (version["id"],),
         )
-        regions = ctx.db.rows(
-            "SELECT page,number,top,bottom,method,warning,state FROM ocr_regions WHERE version_id=? AND required=1 ORDER BY page,number",
-            (version["id"],),
-        )
         for page in pages:
-            parts = [part for part in regions if part["page"] == page["number"]]
-            job = (
-                ctx.db.one(
-                    "SELECT plan FROM ocr_page_jobs WHERE version_id=? AND page=?", (version["id"], page["number"])
-                )
-                if parts
-                else None
-            )
-            page["hints"] = (
-                review_hints(page, parts, json.loads(job["plan"]) if job else None)
-                if page["required"] and not page["confirmed"]
-                else []
-            )
-            page["regions"] = (
-                [{key: value for key, value in part.items() if key != "state"} for part in parts]
-                if page["required"] and not page["confirmed"]
-                else []
-            )
+            review_page(ctx.db, version["id"], page)
+        doc = ctx.db.one("SELECT active_version FROM documents WHERE id=?", (document_id,))
         return {
             "version_id": version["id"],
             "page_count": version["page_count"],
             "status": version["status"],
             "stage": version["stage"],
             "error": version["error"],
+            "optional": bool(version["review_source"]),
+            "active_available": bool(doc["active_version"]),
             "pages": pages,
         }
 
@@ -436,18 +475,9 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         image = render_page(version["path"], number, maximum=2400)
         if hint is not None:
             page = ctx.db.one("SELECT * FROM review_pages WHERE version_id=? AND number=?", (version_id, number))
-            regions = ctx.db.rows(
-                "SELECT * FROM ocr_regions WHERE version_id=? AND page=? AND required=1 ORDER BY number",
-                (version_id, number),
-            )
-            job = ctx.db.one("SELECT plan FROM ocr_page_jobs WHERE version_id=? AND page=?", (version_id, number))
             finding = (
                 next(
-                    (
-                        item
-                        for item in review_hints(page, regions, json.loads(job["plan"]) if job else None)
-                        if item["id"] == hint
-                    ),
+                    (item for item in review_page(ctx.db, version_id, page)["hints"] if item["id"] == hint),
                     None,
                 )
                 if page

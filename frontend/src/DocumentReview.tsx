@@ -10,6 +10,19 @@ type Page = {
   confirmed: number;
   revision: number;
   required: number;
+  recommended?: boolean;
+  evidence?: {
+    local_score: number | null;
+    corrected: boolean;
+    edited?: boolean;
+    regions: {
+      number: number;
+      local_score: number | null;
+      models: string[];
+      ai_uncertain: boolean | null;
+      corrected: boolean;
+    }[];
+  };
   regions: { number: number; top: number; bottom: number; method: string; warning: string }[];
   hints?: {
     id: string;
@@ -28,6 +41,8 @@ type Review = {
   status: string;
   stage: string;
   error: string;
+  optional?: boolean;
+  active_available?: boolean;
   pages: Page[];
 };
 
@@ -64,6 +79,7 @@ export function DocumentReview({
       (page) =>
         showAll ||
         (page.required && !page.confirmed) ||
+        (data.optional && page.recommended) ||
         ((dirty || busy) && page.number === number),
     ) ?? [];
   const selected = visiblePages.find((page) => page.number === number);
@@ -220,13 +236,16 @@ export function DocumentReview({
         <p>
           Cocokkan teks dengan gambar asli, perbaiki angka, tanggal, periode, negasi, dan hubungan
           kolom tabel pada bagian yang ditandai. Halaman yang sudah lolos otomatis tidak wajib
-          dikonfirmasi ulang. Secara awal hanya halaman yang masih memerlukan review ditampilkan.
-          Pilih Review seluruh halaman untuk pemeriksaan lengkap. Dokumen belum digunakan untuk
-          chat.
+          dikonfirmasi ulang. Pilih Review seluruh halaman untuk pemeriksaan lengkap.{' '}
+          {data?.active_available
+            ? 'Versi aktif tetap tersedia untuk chat selama review dan pembuatan indeks baru.'
+            : 'Dokumen belum digunakan untuk chat.'}
         </p>
         <p>
           <strong>
-            {checked}/{required} halaman yang perlu review sudah dikonfirmasi.
+            {data?.optional && !required
+              ? 'Review tambahan bersifat opsional; dokumen sudah aktif.'
+              : `${checked}/${required} halaman yang perlu review sudah dikonfirmasi.`}
           </strong>{' '}
           {data?.status === 'processing' ? data.stage : ''}
         </p>
@@ -250,7 +269,7 @@ export function DocumentReview({
           disabled={busy || dirty}
           onClick={() => setShowAll(false)}
         >
-          Hanya halaman perlu review
+          {data?.optional ? 'Halaman disarankan review' : 'Hanya halaman perlu review'}
         </button>
         <button
           className={'button secondary compact' + (showAll ? ' current' : '')}
@@ -264,7 +283,11 @@ export function DocumentReview({
       {data && (
         <p className="document-meta review-summary">
           Menampilkan {visiblePages.length} dari {data.page_count} halaman
-          {showAll ? '.' : ' yang masih memerlukan review.'}
+          {showAll
+            ? '.'
+            : data.optional
+              ? ' yang disarankan diperiksa.'
+              : ' yang masih memerlukan review.'}
         </p>
       )}
       <nav className="review-pages" aria-label="Pilih halaman review">
@@ -280,22 +303,75 @@ export function DocumentReview({
             }}
             aria-current={page.number === number ? 'page' : undefined}
           >
-            {page.confirmed || !page.required ? '✓ ' : '! '}
+            {page.recommended && !page.confirmed
+              ? '? '
+              : page.confirmed || !page.required
+                ? '✓ '
+                : '! '}
             {page.number}
           </button>
         ))}
       </nav>
       {ready && !showAll && !visiblePages.length && (
         <p role="status">
-          Semua halaman yang memerlukan review sudah dikonfirmasi. Anda dapat membuat indeks atau
-          memilih Review seluruh halaman untuk memeriksa kembali dokumen.
+          {data?.optional
+            ? 'Tidak ada halaman yang ditandai untuk review tambahan. Pilih Review seluruh halaman untuk memeriksa atau memperbaiki bagian lain.'
+            : 'Semua halaman yang memerlukan review sudah dikonfirmasi. Anda dapat membuat indeks atau memilih Review seluruh halaman untuk memeriksa kembali dokumen.'}
         </p>
       )}
       {selected && data && (
         <>
+          {selected.evidence && (
+            <details className="review-evidence" open>
+              <summary>Detail keyakinan pembacaan · halaman {number}</summary>
+              <p>
+                {selected.evidence.local_score === null
+                  ? 'Skor OCR lokal tidak tersedia; halaman teks PDF atau bukti OCR lama dapat tidak memiliki skor.'
+                  : `Indikator OCR lokal: ${selected.evidence.local_score}/100 (rata-rata skor kata).`}{' '}
+                Ini indikator pembacaan, bukan jaminan kebenaran atau persentase kesalahan. AI hanya
+                melaporkan keraguan, tanpa skor akurasi terukur.
+              </p>
+              {selected.evidence.corrected && (
+                <p>
+                  Teks telah dikonfirmasi admin. Bukti berikut berasal dari pembacaan awal sebelum
+                  konfirmasi.
+                </p>
+              )}
+              {selected.evidence.edited && !selected.evidence.corrected && (
+                <p>
+                  Draft telah diedit dan belum dikonfirmasi. Bukti berikut berasal dari pembacaan
+                  awal.
+                </p>
+              )}
+              {!!selected.evidence.regions.length && (
+                <ul>
+                  {selected.evidence.regions.map((part) => (
+                    <li key={part.number}>
+                      <strong>Bagian {part.number}</strong> · OCR lokal{' '}
+                      {part.local_score === null
+                        ? 'tanpa skor tersimpan'
+                        : `${part.local_score}/100`}
+                      {' · '}
+                      {part.models.length
+                        ? part.models.join(' → ')
+                        : 'Tidak ada pembacaan AI tersimpan'}
+                      {part.ai_uncertain !== null &&
+                        (part.ai_uncertain
+                          ? ' · AI melaporkan keraguan'
+                          : ' · AI tidak melaporkan keraguan')}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
+          )}
           {!!selected.hints?.length && (
             <div className="review-findings" aria-label="Petunjuk bagian yang diragukan">
-              <h3>Bagian yang perlu diperiksa</h3>
+              <h3>
+                {selected.required && !selected.confirmed
+                  ? 'Bagian yang perlu diperiksa'
+                  : 'Bagian yang disarankan diperiksa (opsional)'}
+              </h3>
               <p>
                 Cocokkan kutipan berikut dengan gambar. Posisi perkiraan ditandai untuk membantu
                 pencarian; teks yang diragukan belum tentu salah.
@@ -519,6 +595,8 @@ export function DocumentReview({
       )}
       <div className="review-footer">
         <p>
+          {data?.optional &&
+            'Jika ada koreksi, simpan dan konfirmasi halaman yang diubah sebelum membuat indeks baru. '}
           Setelah halaman yang perlu review dikonfirmasi, buat indeks dari teks yang sudah
           diperiksa. Langkah ini memakai embedding OpenAI berbiaya kecil, tanpa membaca scan dengan
           AI lagi. Versi lama tetap aktif sampai indeks baru berhasil.
@@ -531,7 +609,8 @@ export function DocumentReview({
             dirty ||
             !data?.page_count ||
             data.pages.length !== data.page_count ||
-            checked !== required
+            checked !== required ||
+            (!!data?.optional && !data.pages.some((page) => page.revision > 0))
           }
           onClick={index}
         >

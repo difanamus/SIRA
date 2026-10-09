@@ -1777,6 +1777,42 @@ textarea::placeholder {
     flex-wrap: wrap;
   }
 }
+.verification-note {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-left: 3px solid #b18a4a;
+  background: #faf8f3;
+  border-radius: 4px;
+}
+.verification-note p {
+  margin: 0;
+}
+.verification-note p + p {
+  margin-top: 5px;
+}
+.review-evidence {
+  margin: 0 24px 20px;
+  padding: 12px 16px;
+  background: #f5f7f9;
+  border: 1px solid #e2e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.review-evidence summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.review-evidence p,
+.review-evidence li {
+  margin-top: 8px;
+  line-height: 1.65;
+}
+@media (max-width: 900px) {
+  .review-evidence {
+    margin: 0 16px 16px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;

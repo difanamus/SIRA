@@ -985,7 +985,9 @@ function Admin({ health }: { health: Health | null }) {
                             : doc.status === 'failed'
                               ? 'Gagal diproses'
                               : doc.status === 'review'
-                                ? 'Menunggu review'
+                                ? doc.review_source
+                                  ? 'Siap · review opsional'
+                                  : 'Menunggu review'
                                 : 'Sedang diproses'}
                         </span>
                       </div>
@@ -1005,6 +1007,26 @@ function Admin({ health }: { health: Health | null }) {
                         </div>
                       )}
                       {doc.error && <p className="document-error">{doc.error}</p>}
+                      {doc.verification && (
+                        <div className="verification-note">
+                          <p>
+                            <strong>
+                              {doc.verification.accepted_pages} halaman pada versi aktif siap
+                              digunakan.
+                            </strong>{' '}
+                            {doc.verification.recommended_parts
+                              ? `${doc.verification.recommended_parts} bagian disarankan diperiksa; review bersifat opsional.`
+                              : 'Tidak ada bagian yang ditandai untuk review tambahan.'}
+                          </p>
+                          <p className="document-meta">
+                            {doc.verification.local_score === null
+                              ? 'Skor OCR lokal tidak tersedia untuk versi ini.'
+                              : `Indikator OCR lokal: ${doc.verification.local_score}/100 · rata-rata ${doc.verification.scored_pages} halaman dengan bukti tersimpan.`}{' '}
+                            Skor ini bukan persentase kebenaran dokumen. Detail tersedia di Review
+                            dan koreksi.
+                          </p>
+                        </div>
+                      )}
                       {doc.warning && (
                         <details className="ocr-details">
                           <summary>Peringatan kualitas ekstraksi</summary>
@@ -1117,6 +1139,7 @@ function Admin({ health }: { health: Health | null }) {
                             </>
                           )}
                           {(doc.status === 'failed' ||
+                            doc.status === 'ready' ||
                             doc.status === 'review' ||
                             (doc.status === 'processing' && doc.ocr_mode === 'review')) && (
                             <button
@@ -1128,7 +1151,7 @@ function Admin({ health }: { health: Health | null }) {
                                     method: 'POST',
                                   });
                                   setReviewing(doc);
-                                }, 'Review dokumen dibuka. Cocokkan dan konfirmasi halaman yang ditandai sebelum membuat indeks.')
+                                }, 'Review dokumen dibuka. Koreksi disimpan sebagai draft; versi aktif tetap tersedia untuk chat.')
                               }
                             >
                               Review dan koreksi
