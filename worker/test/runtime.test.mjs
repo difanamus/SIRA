@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 
 const token = 'test-token-not-a-real-secret';
+const installationToken = 'public-install-demo-' + 'a'.repeat(40);
 const source = { id: 'S1', title: 'Uji', page: 1, text: 'Sumber uji.' };
 
 function runtime(overrides = {}, observe = () => {}) {
@@ -65,6 +66,56 @@ const post = (mf, path = '/embeddings', body = { input: ['Uji'] }, auth = token)
     headers: { Authorization: 'Bearer ' + auth, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+
+test('public installer receives only a separate demo credential and existing auth still works', async () => {
+  let calls = 0;
+  const mf = runtime({ INSTALLATION_ACCESS_ENABLED: 'true', INSTALLATION_TOKEN: installationToken }, () => calls++);
+  try {
+    const response = await mf.dispatchFetch('https://relay.test/installation');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const info = await response.json();
+    assert.deepEqual(info, {
+      relay_url: 'https://relay.test', relay_token: installationToken,
+      expires_at: '2099-01-01T00:00:00Z', access: 'public-demo',
+    });
+    assert.equal(calls, 0);
+    assert.equal((await post(mf, '/embeddings', { input: ['Uji'] }, installationToken)).status, 200);
+    assert.equal((await post(mf)).status, 200);
+    assert.equal(calls, 2);
+    assert.equal((await post(mf, '/answer', { question: 'Uji', history: [], sources: [source], model: 'other' }, installationToken)).status, 400);
+    assert.equal((await post(mf, '/installation')).status, 405);
+  } finally { await mf.dispose(); }
+});
+
+test('public installation and demo access stop when revoked, expired or unconfigured', async () => {
+  for (const overrides of [
+    { INSTALLATION_ACCESS_ENABLED: 'false' },
+    { RELAY_ENABLED: 'false' },
+    { RELAY_EXPIRES_AT: '2020-01-01T00:00:00Z' },
+    { INSTALLATION_TOKEN: '' },
+    { OPENAI_API_KEY: '' },
+  ]) {
+    let calls = 0;
+    const mf = runtime({ INSTALLATION_ACCESS_ENABLED: 'true', INSTALLATION_TOKEN: installationToken, ...overrides }, () => calls++);
+    try {
+      assert.notEqual((await mf.dispatchFetch('https://relay.test/installation')).status, 200);
+      assert.notEqual((await post(mf, '/embeddings', { input: ['Uji'] }, installationToken)).status, 200);
+      assert.equal(calls, 0);
+      if (overrides.INSTALLATION_ACCESS_ENABLED === 'false') assert.equal((await post(mf)).status, 200);
+    } finally { await mf.dispose(); }
+  }
+});
+
+test('automatic installation cannot bypass shared quota, minute limit or request validation', async () => {
+  const mf = runtime({ INSTALLATION_ACCESS_ENABLED: 'true', INSTALLATION_TOKEN: installationToken, REQUESTS_PER_MINUTE: '1' });
+  try {
+    assert.equal((await post(mf, '/embeddings', { input: ['Uji'] }, installationToken)).status, 200);
+    const second = await post(mf);
+    assert.equal(second.status, 429);
+    assert.equal((await second.json()).code, 'relay_rate');
+  } finally { await mf.dispose(); }
+});
 
 test('runtime rejects bad auth, arbitrary operations and server-side model override', async () => {
   const mf = runtime();

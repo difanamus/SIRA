@@ -5,6 +5,8 @@ compatibility_date = "2026-10-01"
 [vars]
 # Enable only after configuring Secrets and expiry.
 RELAY_ENABLED = "false"
+# Owner enables public automatic installation only on the deployed exam relay.
+INSTALLATION_ACCESS_ENABLED = "false"
 RELAY_EXPIRES_AT = "2026-10-16T03:42:55Z"
 MAX_REQUESTS = "1000"
 MAX_TOKEN_UNITS = "2000000"

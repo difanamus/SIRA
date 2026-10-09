@@ -50,6 +50,7 @@ dist/
 build/
 .vite/
 .wrangler/
+/worker/.wrangler-auto-install.toml
 *.tsbuildinfo
 .pnpm-store/
 

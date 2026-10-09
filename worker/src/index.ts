@@ -4,6 +4,8 @@ import { actualCost, reserveCost } from './cost';
 interface Env {
   OPENAI_API_KEY: string;
   RELAY_TOKEN_HASH: string;
+  INSTALLATION_ACCESS_ENABLED?: string;
+  INSTALLATION_TOKEN?: string;
   RELAY_ENABLED: string;
   RELAY_EXPIRES_AT: string;
   MAX_REQUESTS: string;
@@ -124,6 +126,18 @@ async function authorised(request: Request, expected: string): Promise<boolean> 
   return difference === 0;
 }
 
+async function installationHash(env: Env): Promise<string | null> {
+  if (env.INSTALLATION_ACCESS_ENABLED !== 'true' ||
+      !/^[A-Za-z0-9_-]{40,100}$/.test(env.INSTALLATION_TOKEN ?? '')) return null;
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(env.INSTALLATION_TOKEN));
+  return Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function active(env: Env): boolean {
+  const expiry = Date.parse(env.RELAY_EXPIRES_AT);
+  return env.RELAY_ENABLED === 'true' && Number.isFinite(expiry) && Date.now() < expiry;
+}
+
 async function readBody(request: Request) {
   const maximum = 8 * 1024 * 1024;
   if (Number(request.headers.get('content-length') ?? 0) > maximum)
@@ -154,12 +168,28 @@ async function readBody(request: Request) {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    // This is an explicitly public, time-limited demo credential, not the owner's
+    // private relay token or OpenAI key. Anonymous installers cannot be identified
+    // as judges. Disabling installation access also revokes this demo credential.
+    if (url.pathname === '/installation') {
+      if (request.method !== 'GET') return json('Metode tidak diizinkan.', 405);
+      if (!active(env) || !(await installationHash(env)))
+        return json('Instalasi otomatis tidak aktif atau masa akses sudah berakhir.', 403);
+      if (!env.OPENAI_API_KEY) return json('Layanan belum dikonfigurasi.', 503);
+      return Response.json({
+        relay_url: url.origin,
+        relay_token: env.INSTALLATION_TOKEN,
+        expires_at: env.RELAY_EXPIRES_AT,
+        access: 'public-demo',
+      }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+    }
     if (!['/embeddings', '/answer', '/vision', '/vision-fragment'].includes(url.pathname))
       return json('Tidak ditemukan.', 404);
     if (request.method !== 'POST') return json('Metode tidak diizinkan.', 405);
-    if (!(await authorised(request, env.RELAY_TOKEN_HASH))) return json('Akses ditolak.', 401);
-    const expiry = Date.parse(env.RELAY_EXPIRES_AT);
-    if (env.RELAY_ENABLED !== 'true' || !Number.isFinite(expiry) || Date.now() >= expiry)
+    const demoHash = await installationHash(env);
+    if (!(await authorised(request, env.RELAY_TOKEN_HASH)) &&
+        !(demoHash && await authorised(request, demoHash))) return json('Akses ditolak.', 401);
+    if (!active(env))
       return json('Akses pengujian tidak aktif atau sudah berakhir.', 403);
     if (!env.OPENAI_API_KEY) return json('Layanan belum dikonfigurasi.', 503);
     if (!request.headers.get('content-type')?.includes('application/json'))

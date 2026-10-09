@@ -27,4 +27,6 @@ if (-not $SkipAdmin) {
     & '.\.venv\Scripts\python.exe' -m backend.setup_admin
     if ($LASTEXITCODE -ne 0) { throw 'Setup admin belum berhasil.' }
 }
-Write-Host 'Setup selesai. Pasang OCR melalui scripts/setup-ocr.ps1, isi konfigurasi relay, kemudian jalankan start.ps1.'
+& '.\.venv\Scripts\python.exe' -m backend.setup_relay
+if ($LASTEXITCODE -ne 0) { throw 'Koneksi AI otomatis belum berhasil; baca pesan di atas lalu jalankan setup kembali.' }
+Write-Host 'Setup selesai dan konfigurasi Cloudflare siap. Pasang OCR melalui scripts/setup-ocr.ps1, kemudian jalankan start.ps1.'

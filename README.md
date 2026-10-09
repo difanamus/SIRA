@@ -10,7 +10,7 @@ Halaman chat berada di `/`, halaman pengelolaan dokumen di `/admin`. Referensi j
 
 - Windows 64-bit, Python **3.12**, Node.js **24 LTS**, dan PowerShell.
 - Internet untuk instalasi dan pemanggilan AI. Ekstraksi PDF, OCR lokal, dan pencarian vektor berjalan di PC.
-- Relay Cloudflare milik peserta yang telah dikonfigurasi. Penguji tidak perlu akun Cloudflare, Wrangler, atau API key OpenAI.
+- Relay Cloudflare milik peserta. Selama akses demo ujian aktif, instalasi terhubung otomatis; penguji tidak perlu akun Cloudflare, Wrangler, API key OpenAI, atau memasukkan token secara manual.
 - Tesseract dengan bahasa `ind` dan `eng` untuk PDF scan.
 
 Dependensi Python dan npm dikunci. Implementasi diuji pada lingkungan Windows pengembang; pengujian instalasi pada PC Windows bersih masih perlu dilakukan.
@@ -25,11 +25,31 @@ Jalankan PowerShell di folder proyek:
 .\start.ps1
 ```
 
-`setup.ps1` membuat `.venv`, memasang dependensi, membangun frontend, menyiapkan tokenizer, dan meminta akun admin melalui terminal. Password minimal 12 karakter, disimpan sebagai hash Argon2. Jika PowerShell memblokir skrip, jalankan skrip dengan `pwsh -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -PythonPath 'C:\path\ke\python.exe'` untuk proses tersebut.
+`setup.ps1` membuat `.venv`, memasang dependensi, membangun frontend, menyiapkan tokenizer, dan meminta Anda membuat akun admin melalui terminal. Ganti contoh path Python di atas dengan lokasi Python 3.12 pada komputer Anda. Jika PowerShell memblokir skrip, jalankan skrip dengan `pwsh -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -PythonPath 'C:\path\ke\python.exe'` untuk proses tersebut.
+
+### Membuat akun admin pada instalasi pertama
+
+**Penguji membuat username dan password sendiri saat menjalankan `setup.ps1`. Tidak ada password admin bawaan yang perlu diperoleh dari peserta atau README.** Setelah pemasangan dependensi selesai, terminal akan meminta:
+
+1. **Nama admin [admin]:** masukkan nama pengguna pilihan Anda, atau tekan Enter untuk menggunakan `admin`.
+2. **Password (minimal 12 karakter):** masukkan password pilihan Anda. Karakter password tidak terlihat saat diketik di terminal; ini normal.
+3. **Ulangi password:** ketik kembali password yang sama untuk konfirmasi.
+
+Setelah akun dibuat, setup menghubungkan AI ke Cloudflare secara otomatis. Lanjutkan pemasangan OCR, lalu jalankan `.\start.ps1`. Buka <http://127.0.0.1:8000/admin> dan login menggunakan username serta password yang baru Anda buat. Simpan password secara pribadi; jangan memasukkannya ke README atau GitHub.
+
+Akun ini hanya berlaku pada instalasi SIRA di komputer Anda. Orang lain yang mengunduh kode dan membuat akun pada instalasi mereka tidak otomatis mendapat akses ke instalasi Anda. Password disimpan sebagai hash Argon2 dalam database lokal di folder `data/`, yang tidak dilacak Git.
+
+Jika akun sudah ada, menjalankan setup lagi tidak mengganti password. Gunakan akun sebelumnya; jika lupa password, ikuti perintah reset pada bagian **Struktur dan penyimpanan**. Pembuatan akun dan reset dilakukan melalui terminal pada komputer yang menjalankan SIRA, bukan melalui pendaftaran publik di halaman login.
+
+### OCR dan konfigurasi AI
 
 OCR dipasang lokal dalam `tools/tesseract`, dengan checksum installer dan model bahasa yang diverifikasi. Skrip tidak menghapus instalasi yang sudah ada. Alternatif: isi `SIRA_TESSERACT_CMD` di `.env` dengan path Tesseract milik Anda, pastikan model `ind` dan `eng` tersedia.
 
-Konfigurasi AI tersimpan pada `.env` lokal, berdasarkan `.env.example`. Isi `SIRA_RELAY_URL` dan `SIRA_RELAY_TOKEN` dengan akses relay pengujian yang diberikan peserta. **Jangan menaruh API key OpenAI di frontend atau membagikan `.env` melalui Git.** Petunjuk untuk pemilik relay ada pada [docs/relay-setup.md](docs/relay-setup.md).
+**Penguji tidak perlu mengisi konfigurasi AI secara manual.** `setup.ps1` mengambil konfigurasi demo dari endpoint Cloudflare yang tercantum dalam `config/relay.json`, lalu menyimpan URL dan token demo pada `.env` lokal. `start.ps1` juga menjalankan langkah ini apabila konfigurasi belum terisi. Konfigurasi milik pengguna yang sudah lengkap tidak ditimpa. Tidak ada request OpenAI saat mengambil konfigurasi; sesudah aplikasi berjalan, login admin dan pilih **Uji koneksi AI** untuk memeriksa OpenAI dengan satu request embedding kecil berbayar.
+
+Akses demo ujian berlaku hingga **16 Oktober 2026 pukul 10.42 WIB** (batas tepat: `2026-10-16T03:42:55Z`). Setelah berakhir atau dicabut pemilik, pemanggilan AI berhenti; dokumen dan data lokal tetap tersimpan. Jika koneksi otomatis gagal, setup memberi pesan bahwa AI belum siap. Periksa internet, lalu ulangi setup atau jalankan `.\.venv\Scripts\python.exe -m backend.setup_relay`.
+
+Pemilik telah mengizinkan akses demo publik selama masa pengujian: siapa pun yang mengunduh kode dapat memperoleh token demo melalui endpoint instalasi dan pemakaian AI ditagihkan ke akun pemilik. Token demo berbeda dari token privat instalasi pemilik; model, operasi, proteksi per menit, dan masa berlaku tetap dikendalikan Cloudflare. **API key OpenAI tidak dikirim ke laptop penguji. Jangan membagikan `.env` melalui Git.** Panduan aktivasi/pencabutan: [instalasi otomatis](docs/automatic-installation.md). Petunjuk relay milik sendiri dan konfigurasi manual sebagai alternatif ada pada [docs/relay-setup.md](docs/relay-setup.md).
 
 Buka:
 
@@ -114,7 +134,7 @@ Runtime test memerlukan hasil bundel `worker/dist/index.js`; seluruh tes memakai
 
 | Masalah | Langkah |
 | --- | --- |
-| AI belum dikonfigurasi | Isi relay URL/token pada `.env`, restart backend, uji koneksi dari admin |
+| Koneksi AI otomatis gagal | Periksa internet dan masa akses demo, jalankan `.\.venv\Scripts\python.exe -m backend.setup_relay`, lalu restart; konfigurasi relay milik sendiri tetap dapat diisi manual |
 | Relay menolak akses | Periksa token, aktivasi, tanggal kedaluwarsa, dan kuota melalui pemilik relay |
 | OCR tidak tersedia | Jalankan setup OCR atau periksa path dan `tesseract --list-langs` |
 | Ingestion gagal pada angka/negasi | Gunakan Review dan koreksi untuk mencocokkan gambar serta memperbaiki teks; atau Baca dengan AI jika kuota tersedia |

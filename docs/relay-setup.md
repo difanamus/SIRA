@@ -4,6 +4,8 @@ Petunjuk ini untuk peserta/pemilik akun. Penguji cukup memasang aplikasi lokal d
 
 ## Setup dengan skrip
 
+Untuk **instalasi penguji**, gunakan [alur koneksi otomatis](automatic-installation.md). Penguji tidak menjalankan skrip konfigurasi pemilik di bagian ini. Demo publik aktif setelah izin pemilik; konfigurasi AI terisi melalui `setup.ps1`/`start.ps1` tanpa memasukkan key/token. Perbarui atau cabut akses demo memakai `scripts/deploy-automatic-relay.ps1`, yang mempertahankan variabel deployment aktif. Skrip konfigurasi awal di bawah dapat menonaktifkan kembali akses demo sesuai konfigurasi distribusi default.
+
 Pastikan Node.js tersedia, lalu login sekali:
 
 ```powershell
