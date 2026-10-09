@@ -1,4 +1,6 @@
-# SIRA — Asisten Informasi SDM Polri
+# SIRA — Sistem Informasi dan Referensi Aparatur
+
+Asisten Informasi SDM Polri berbasis dokumen. Nama SIRA merupakan singkatan dari **Sistem Informasi dan Referensi Aparatur**.
 
 Prototype RAG untuk menjawab pertanyaan berdasarkan PDF yang dimasukkan admin. Instalasi baru dimulai dengan knowledge base kosong. PDF, teks hasil ekstraksi, metadata, dan indeks disimpan persisten pada komputer yang menjalankan aplikasi.
 

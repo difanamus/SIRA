@@ -365,6 +365,15 @@ textarea::placeholder {
   width: 32px;
   height: 34px;
 }
+.mascot-avatar {
+  background: transparent;
+}
+.mascot-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 .subtle-tag {
   font-size: 9px;
   border: 1px solid #e5e9ec;

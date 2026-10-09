@@ -6,7 +6,7 @@ Tanggal penyusunan: 8 Oktober 2026.
 
 ## 1. Tujuan dan pedoman
 
-Membangun **SIRA - Asisten Informasi SDM Polri**, prototype chatbot Retrieval-Augmented Generation (RAG) yang menjawab berdasarkan dokumen yang dimasukkan admin. Aplikasi dapat dijalankan secara lokal oleh penguji, dengan layanan OpenAI melalui relay Cloudflare Workers milik peserta.
+Membangun **SIRA — Sistem Informasi dan Referensi Aparatur**, dengan deskripsi **Asisten Informasi SDM Polri**, prototype chatbot Retrieval-Augmented Generation (RAG) yang menjawab berdasarkan dokumen yang dimasukkan admin. Aplikasi dapat dijalankan secara lokal oleh penguji, dengan layanan OpenAI melalui relay Cloudflare Workers milik peserta.
 
 Pedoman tugas:
 

@@ -4,6 +4,17 @@ import { api, setCsrf } from './api';
 import type { Doc, Health, Source } from './api';
 import { DocumentReview } from './DocumentReview';
 
+const siraFullName = 'SIRA — Sistem Informasi dan Referensi Aparatur';
+const mascotUrl = new URL('./assets/sira-mascot.png', import.meta.url).href;
+
+function MascotAvatar({ small = false }: { small?: boolean }) {
+  return (
+    <span className={'avatar mascot-avatar' + (small ? ' small' : '')}>
+      <img src={mascotUrl} alt="" aria-hidden="true" width={33} height={36} />
+    </span>
+  );
+}
+
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
     chat: (
@@ -82,7 +93,7 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 
 function Brand({ small = false }: { small?: boolean }) {
   return (
-    <div className={'brand ' + (small ? 'brand-small' : '')}>
+    <div className={'brand ' + (small ? 'brand-small' : '')} title={siraFullName}>
       <span className="brand-mark">
         <Icon name="shield" size={small ? 22 : 30} />
       </span>
@@ -193,7 +204,7 @@ function savedChatSession() {
 }
 const welcome: Message = {
   role: 'assistant',
-  text: 'Selamat datang. Saya SIRA, Asisten Informasi SDM Polri. Silakan ajukan pertanyaan mengenai informasi dalam dokumen yang tersedia.',
+  text: 'Selamat datang. Saya SIRA (Sistem Informasi dan Referensi Aparatur), asisten informasi SDM Polri. Silakan ajukan pertanyaan mengenai informasi dalam dokumen yang tersedia.',
 };
 
 function Chat({ health }: { health: Health | null }) {
@@ -439,11 +450,9 @@ function Chat({ health }: { health: Health | null }) {
         <div className="chat-card">
           <div className="chat-card-header">
             <div className="assistant-label">
-              <span className="avatar small">
-                <Icon name="shield" size={18} />
-              </span>
+              <MascotAvatar small />
               <div>
-                <strong>SIRA</strong>
+                <strong title={siraFullName}>SIRA</strong>
                 <small>Asisten Informasi SDM Polri</small>
               </div>
             </div>
@@ -491,11 +500,7 @@ function Chat({ health }: { health: Health | null }) {
             ) : (
               messages.map((message, index) => (
                 <div className={'message ' + message.role} key={index}>
-                  {message.role === 'assistant' && (
-                    <span className="avatar">
-                      <Icon name="shield" size={18} />
-                    </span>
-                  )}
+                  {message.role === 'assistant' && <MascotAvatar />}
                   <div className="message-content">
                     <span className="speaker">
                       {message.role === 'assistant' ? 'SIRA' : 'Anda'}
