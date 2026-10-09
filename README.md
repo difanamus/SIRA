@@ -123,7 +123,9 @@ Browser → FastAPI lokal → Cloudflare relay → OpenAI
 
 Ingestion: validasi PDF → ekstraksi teks per halaman → OCR lokal jika perlu → GPT-6 Luna → GPT-5.6 Sol hanya pada potongan meragukan → review selektif jika belum lolos → chunk maksimal sekitar 650 token → embedding `text-embedding-3-small` → indeks Chroma → aktivasi versi.
 
-Chat: pertanyaan dan konteks maksud sesi → embedding query → pencarian versi aktif → evidence bernomor → GPT-6 Luna → streaming → validasi ID sumber → referensi teks. Histori jawaban model tidak dijadikan sumber fakta.
+Chat: pertanyaan dan konteks maksud sesi → embedding query + pencarian kata BM25 pada seluruh potongan versi aktif → evidence bernomor → GPT-6 Luna → streaming → validasi ID sumber → referensi teks. Histori jawaban model tidak dijadikan sumber fakta.
+
+Pencarian menggabungkan kandidat vektor dengan kandidat kata, termasuk variasi kata seperti “lolos/lulus/kelulusan”. Sumber tetap berupa teks asli dokumen. Indeks kata berada di memori dan diperbarui saat knowledge base berubah; tidak perlu upload atau embedding ulang. Pertanyaan lanjutan seperti “lah, bukannya ada di jadwal?” mempertahankan topik pertanyaan pengguna sebelumnya. Jika AI menyatakan informasi belum ditemukan, aplikasi melakukan satu pencarian tambahan; jawaban diperiksa ulang jika ditemukan potongan sumber baru. Batasnya tetap 10 sumber dan 24.000 karakter, tanpa pencarian berulang tanpa akhir. Log backend mencatat ID potongan, dokumen dan halaman yang dikirim sebagai sumber, tanpa menyimpan API key atau isi pertanyaan dalam log pencarian.
 
 API key OpenAI hanya berada di Cloudflare Secrets. Relay membatasi operasi, model, payload, jumlah request, unit reservasi, kecepatan, dan masa berlaku. Token lokal dapat dicabut. Pengguna dengan kendali penuh atas PC dapat membaca token relay lokal, sehingga token tersebut memiliki batas penggunaan dan bukan API key utama.
 

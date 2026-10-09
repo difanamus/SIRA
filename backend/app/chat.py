@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from threading import RLock
 
 from .ai import AIError
+from .retrieval import LexicalIndex, fuse, verification_query
 from .security import digest
 
 log = logging.getLogger("sira.chat")
@@ -15,7 +16,13 @@ NOT_FOUND = "Maaf, informasi tersebut belum ditemukan dalam dokumen yang tersedi
 SAFE_REFUSAL = "Maaf, saya tidak dapat memenuhi permintaan untuk mengubah aturan atau mengungkap informasi internal."
 FOLLOW_UP = re.compile(
     r"^(kalau|bagaimana dengan|lalu|dan untuk|yang tadi|itu|terus|untuk yang|masa sih|yakin|benarkah|"
-    r"apa benar|bukankah|coba (?:cek|periksa)|periksa (?:lagi|ulang))\b",
+    r"apa benar|bukankah|bukannya|lah|kan|eror|error|coba (?:cek|periksa)|periksa (?:lagi|ulang))\b",
+    re.I,
+)
+FOLLOW_UP_REFERENCE = re.compile(r"\b(?:itu|tadi|tersebut|sebelumnya)\b", re.I)
+ABSENT_EVIDENCE = re.compile(
+    r"(?:belum|tidak)\s+(?:ditemukan|tersedia|mencantumkan|menyebutkan|menyebut|tercantum|disebutkan|disebut)"
+    r"|tidak\s+(?:ada|dapat memastikan)\s+(?:tanggal|jadwal|informasi|ketentuan|waktu)?",
     re.I,
 )
 GREETING = re.compile(
@@ -70,6 +77,7 @@ class Chat:
         self.settings, self.db, self.vectors, self.relay = settings, db, vectors, relay
         self.sessions = {}
         self.cache_lock = RLock()
+        self.lexical = LexicalIndex(db)
 
     def _cache(self, token, session):
         now = time.monotonic()
@@ -141,7 +149,7 @@ class Chat:
         started = time.monotonic()
         embedding = self.relay.embed([query])[0]
         embedded = time.monotonic()
-        candidates = self.vectors.search(embedding, versions)
+        candidates = self.vectors.search(embedding, versions, limit=36)
         found = []
         for chunk_id, distance in candidates:
             if distance > 0.85:
@@ -154,32 +162,15 @@ class Chat:
             if row:
                 row["distance"] = distance
                 found.append(row)
-        # Light lexical tie-break inside semantic candidates; no extra model request.
-        terms = set(re.findall(r"\w{3,}", query.lower())) - {
-            "yang",
-            "dan",
-            "untuk",
-            "apa",
-            "saja",
-            "kalau",
-            "bagaimana",
-            "dengan",
-        }
-        found.sort(
-            key=lambda c: c["distance"] - 0.025 * min(4, len(terms & set(re.findall(r"\w{3,}", c["text"].lower()))))
-        )
-        selected, used = [], 0
-        for row in found:
-            if len(selected) >= 10 or used + len(row["text"]) > 24000:
-                break
-            row["source_id"] = f"S{len(selected) + 1}"
-            selected.append(row)
-            used += len(row["text"])
+        lexical = self.lexical.search(query)
+        selected = fuse(found, lexical)
         log.info(
-            "retrieval embedding_ms=%s retrieval_ms=%s chunks=%s",
+            "retrieval embedding_ms=%s retrieval_ms=%s semantic=%s lexical=%s sources=%s",
             round((embedded - started) * 1000),
             round((time.monotonic() - embedded) * 1000),
-            len(selected),
+            len(found),
+            len(lexical),
+            [(s["source_id"], s["document_id"], s["page"], s["id"]) for s in selected],
         )
         return selected
 
@@ -265,6 +256,7 @@ class Chat:
             )
             yield event("done", sources=[])
             return
+        follow_up = bool(FOLLOW_UP.match(question) or FOLLOW_UP_REFERENCE.search(question)) and len(question) < 180
         if FOLLOW_UP.match(question) and not session.questions:
             yield event(
                 "delta",
@@ -273,7 +265,7 @@ class Chat:
             yield event("done", sources=[])
             return
         query = question
-        if FOLLOW_UP.match(question) and len(question) < 180:
+        if follow_up and session.questions:
             query = session.search_context[-1400:] + "\nPertanyaan lanjutan: " + question
         try:
             yield event("status", message="Mencari informasi dalam dokumen...")
@@ -293,7 +285,9 @@ class Chat:
             }
             first = True
             yield event("status", message="Menyusun jawaban berdasarkan sumber...")
-            for attempt in range(2):
+            citation_retried = False
+            evidence_checked = False
+            for _ in range(3):
                 answer = ""
                 async for text in self.relay.answer(payload):
                     if self.db.revision != revision:
@@ -309,9 +303,26 @@ class Chat:
                 valid = {s["source_id"] for s in sources}
                 if cited - valid:
                     raise AIError("Referensi jawaban tidak valid. Silakan coba kembali.")
+                if answer.strip() != SAFE_REFUSAL and not evidence_checked and ABSENT_EVIDENCE.search(answer):
+                    evidence_checked = True
+                    additional = await asyncio.to_thread(self.retrieve, verification_query(query, question))
+                    if self.db.revision != revision:
+                        raise AIError("Knowledge base berubah saat pencarian. Silakan kirim ulang pertanyaan.")
+                    old_ids = {s["id"] for s in sources}
+                    new_evidence = [s for s in additional if s["id"] not in old_ids]
+                    if new_evidence:
+                        # Keep prior evidence, but ensure newly discovered sources are included.
+                        sources = fuse(new_evidence[:3] + sources, [])
+                        payload["sources"] = [
+                            {"id": s["source_id"], "title": s["title"], "page": s["page"], "text": s["text"]}
+                            for s in sources
+                        ]
+                        yield event("reset_answer", message="Memeriksa sumber tambahan...")
+                        continue
                 missing = (
                     not cited
                     and answer.strip() != SAFE_REFUSAL
+                    and not ABSENT_EVIDENCE.search(answer)
                     and not re.search(
                         r"belum (?:ditemukan|tersedia)|tidak (?:ditemukan|tersedia|dapat memastikan)|mohon.*jelas|perjelas",
                         answer,
@@ -320,9 +331,10 @@ class Chat:
                 )
                 if not missing:
                     break
-                if attempt:
+                if citation_retried:
                     raise AIError("Jawaban belum disertai referensi yang dapat diverifikasi. Silakan coba kembali.")
                 payload["citation_retry"] = True
+                citation_retried = True
                 yield event("reset_answer", message="Memeriksa ulang referensi jawaban...")
             references = [
                 {"id": s["source_id"], "title": s["title"], "page": s["page"], "heading": s["heading"]}

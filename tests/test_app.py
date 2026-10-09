@@ -396,6 +396,112 @@ def test_challenge_followup_retrieves_original_question_without_using_assistant_
     assert "Ketentuan pengujian tercantum" not in queries[-1]
 
 
+@pytest.mark.parametrize(
+    "followup",
+    [
+        "lah, bukannya ada di jadwal?",
+        "kan ada kep keputusan itu",
+        "tanggal 29 itu apa?",
+        "eror lu? coba cek halaman 12",
+    ],
+)
+def test_casual_followup_keeps_user_topic_without_assistant_claims(harness, monkeypatch, followup):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    queries = []
+    original = ctx.chat.retrieve
+
+    def track(query):
+        queries.append(query)
+        return original(query)
+
+    monkeypatch.setattr(ctx.chat, "retrieve", track)
+    sid = session(client)
+    topic = "Kapan kelulusan SBP 2027 dan pengiriman surat panggil?"
+    ask(client, sid, topic)
+    result = ask(client, sid, followup)
+    assert result[-1]["type"] == "done"
+    assert topic in queries[-1] and followup in queries[-1]
+    assert "Ketentuan pengujian tercantum" not in queries[-1]
+    assert ai.payloads[-1]["question"] == followup
+
+
+def test_absent_evidence_checks_new_sources_once_and_replaces_answer(harness, monkeypatch):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    base = ctx.chat.retrieve("pengujian")[0]
+    calls = []
+
+    def retrieve(query):
+        calls.append(query)
+        sources = [base]
+        if len(calls) > 1:
+            sources.append(
+                {
+                    **base,
+                    "id": "schedule",
+                    "page": 12,
+                    "text": "KEP KELULUSAN: 23 S.D. 26 NOVEMBER 2026",
+                    "source_id": "S2",
+                }
+            )
+        return sources
+
+    async def answer(payload):
+        ai.payloads.append(dict(payload))
+        if len(ai.payloads) == 1:
+            yield "Pengumuman tidak mencantumkan tanggal kelulusan. [S1]"
+        else:
+            yield "Kelulusan dijadwalkan 23–26 November 2026. [S1]"
+
+    monkeypatch.setattr(ctx.chat, "retrieve", retrieve)
+    ai.answer = answer
+    result = ask(client, session(client), "Kapan kelulusan SBP?")
+    assert len(calls) == 2 and "jadwal tanggal waktu" in calls[1]
+    assert any(e["type"] == "reset_answer" for e in result)
+    assert result[-1]["sources"][0]["page"] == 12
+    assert ai.payloads[-1]["question"] == "Kapan kelulusan SBP?"
+
+
+def test_absent_answer_without_new_evidence_does_not_loop(harness, monkeypatch):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    base = ctx.chat.retrieve("pengujian")
+    calls = []
+
+    def retrieve(query):
+        calls.append(query)
+        return base
+
+    async def answer(payload):
+        ai.payloads.append(payload)
+        yield "Informasi belum ditemukan dalam dokumen yang tersedia."
+
+    monkeypatch.setattr(ctx.chat, "retrieve", retrieve)
+    ai.answer = answer
+    result = ask(client, session(client), "Apakah ada aturan tentang cuaca?")
+    assert result[-1] == {"type": "done", "sources": []}
+    assert len(calls) == 2 and len(ai.payloads) == 1
+
+
+def test_independent_question_does_not_inherit_previous_search_topic(harness, monkeypatch):
+    client, ctx, _, _ = harness
+    wait_document(ctx, upload(client))
+    queries = []
+    original = ctx.chat.retrieve
+
+    def track(query):
+        queries.append(query)
+        return original(query)
+
+    monkeypatch.setattr(ctx.chat, "retrieve", track)
+    sid = session(client)
+    ask(client, sid, "Kapan kelulusan SBP 2027?")
+    fresh = "Bagaimana komponen penilaian kinerja anggota Polri?"
+    ask(client, sid, fresh)
+    assert queries[-1] == fresh
+
+
 def image_reader(harness, monkeypatch, reader=None):
     from test_layout_ocr import text_block
 
