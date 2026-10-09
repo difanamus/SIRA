@@ -19,10 +19,35 @@ FOLLOW_UP = re.compile(
     re.I,
 )
 GREETING = re.compile(
-    r"\s*(?:sira[\s,!.:;-]+)?"
-    r"(?:halo|hallo|hai|hi|hello|selamat\s+(?:pagi|siang|sore|malam)|terima\s+kasih)"
-    r"(?:[\s,!.:;-]+sira)?[\s!.,:;-]*",
+    r"\s*(?:sira|(?:sira[\s,!.:;-]+)?"
+    r"(?:halo|hallo|hai|hi|hello|hei|hey|oy|oi|selamat\s+(?:pagi|siang|sore|malam)|terima\s+kasih)"
+    r"(?:[\s,!.:;-]+sira)?)[\s!.,:;-]*",
     re.I,
+)
+IDENTITY = re.compile(
+    r"\s*(?:(?:halo|hallo|hai|hi|hello|hei|hey|oy|oi)(?:[\s,!.:;-]+sira)?[\s,!.:;-]+|"
+    r"sira[\s,!.:;-]+)?"
+    r"(?:(?:kamu|anda)(?:\s+ini)?\s+(?:siapa|apa)|"
+    r"siapa(?:kah)?\s+(?:kamu|anda|sira)|"
+    r"apa(?:kah)?\s+(?:itu\s+)?sira|"
+    r"sira(?:\s+(?:ini|itu))?\s+(?:siapa|apa)|"
+    r"(?:apa\s+)?(?:kepanjangan|arti|singkatan(?:\s+dari)?)\s+sira|"
+    r"sira\s+(?:singkatan(?:\s+dari)?|kepanjangan(?:nya)?)\s+apa|"
+    r"apa\s+(?:fungsi|tugas|peran)(?:mu|\s+(?:kamu|anda|sira))|"
+    r"(?:kamu|anda|sira)\s+(?:bisa|dapat)\s+(?:membantu|bantu)\s+apa)"
+    r"[\s?!.,:;-]*",
+    re.I,
+)
+IDENTITY_REPLY = (
+    "Saya SIRA (Sistem Informasi dan Referensi Aparatur), asisten AI untuk informasi SDM Polri. "
+    "Saya membantu Anda mencari dan memahami informasi dari dokumen yang tersedia, "
+    "disertai referensi nama dokumen dan halaman sumber. "
+    "Jika informasi belum ditemukan, saya akan menyampaikannya. Apa yang dapat saya bantu?"
+)
+GREETING_REPLY = (
+    "Halo, saya SIRA (Sistem Informasi dan Referensi Aparatur), asisten informasi SDM Polri. "
+    "Dengan senang hati saya membantu Anda mencari informasi dari dokumen yang tersedia. "
+    "Silakan sampaikan pertanyaan Anda."
 )
 
 
@@ -223,6 +248,16 @@ class Chat:
                 "notice",
                 message="Knowledge base telah berubah; konteks sebelumnya direset agar sumber lama tidak digunakan.",
             )
+        # Only complete, allowlisted social messages take this fixed-response path.
+        # Extra questions or instructions still pass through retrieval and relay policy.
+        # These replies work with an empty KB and never replace the document topic.
+        social_reply = IDENTITY_REPLY if IDENTITY.fullmatch(question) else None
+        if social_reply is None and GREETING.fullmatch(question):
+            social_reply = GREETING_REPLY
+        if social_reply:
+            yield event("delta", text=social_reply)
+            yield event("done", sources=[])
+            return
         if not self.db.active_versions():
             yield event(
                 "delta",
@@ -234,15 +269,6 @@ class Chat:
             yield event(
                 "delta",
                 text="Mohon jelaskan topik atau ketentuan yang Anda maksud agar saya dapat mencari informasi yang sesuai.",
-            )
-            yield event("done", sources=[])
-            return
-        # Match the entire message: a greeting followed by a document question
-        # must still retrieve evidence and pass the normal citation checks.
-        if GREETING.fullmatch(question):
-            yield event(
-                "delta",
-                text="Selamat datang. Saya SIRA, Asisten Informasi SDM Polri. Silakan ajukan pertanyaan mengenai dokumen yang tersedia.",
             )
             yield event("done", sources=[])
             return

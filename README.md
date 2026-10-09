@@ -6,6 +6,8 @@ Prototype RAG untuk menjawab pertanyaan berdasarkan PDF yang dimasukkan admin. I
 
 Halaman chat berada di `/`, halaman pengelolaan dokumen di `/admin`. Referensi jawaban berupa nama dokumen dan halaman, tanpa tautan atau unduhan PDF. Riwayat dan konteks percakapan tetap tersedia setelah refresh, tutup/buka browser yang sama, dan restart aplikasi. Hanya **Percakapan baru** yang menghapus sesi lama dan memulai percakapan kosong.
 
+SIRA menjawab sapaan dan pertanyaan perkenalan seperti “kamu siapa?”, “SIRA itu apa?”, dan “oy SIRA” secara sopan tanpa request AI, termasuk saat knowledge base masih kosong. Perkenalan tidak mengganti konteks pertanyaan dokumen. Jalur ini hanya menerima pesan lengkap yang cocok dengan pola perkenalan; pesan yang juga memuat pertanyaan dokumen atau instruksi lain tetap mengikuti alur RAG dan pemeriksaan yang sudah ada.
+
 ## Kebutuhan
 
 - Windows 64-bit, Python **3.12**, Node.js **24 LTS**, dan PowerShell.

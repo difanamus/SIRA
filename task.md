@@ -167,6 +167,8 @@ Aturan penggunaan:
 
 ## Catatan progres
 
+- [x] 9 Oktober 2026: menambahkan perkenalan profesional untuk identitas/fungsi/kepanjangan SIRA dan sapaan seperti “oy SIRA”, termasuk pada KB kosong. Respons tetap tanpa AI hanya berlaku untuk seluruh pesan yang cocok; instruksi/pertanyaan tambahan tetap mengikuti alur RAG dan kebijakan relay. Topik dokumen dan riwayat persisten tetap terjaga. 90 tes backend lulus, 1 live opt-in dilewati; 7 tes perkenalan/sapaan terarah serta Ruff/format/diff check lulus. Tidak ada perubahan OCR, prompt/model relay, data utama, atau request AI berbayar. Panduan dan ZIP instalasi diperbarui.
+
 - [x] 9 Oktober 2026: memperbaiki hilangnya tanda kutip kode Python saat setup dijalankan melalui Windows PowerShell 5.1. Pemeriksaan versi dan persiapan tokenizer kini mengirim kode melalui stdin. Dua blok asli dari setup berhasil diuji dengan Python 3.12 di PowerShell 5.1 dan 7; Python 3.14 ditolak melalui pemeriksaan versi, tanpa SyntaxError. README troubleshooting diperbarui. Tidak ada perubahan logika aplikasi, data, relay, atau request AI.
 
 - [x] 9 Oktober 2026: memperjelas README instalasi portable: periksa Python 3.12/Node 24, jalankan setup biasa bila versi cocok, cari executable 3.12 dengan launcher atau path lokal, dan tegaskan path Codex peserta tidak diperlukan penguji. Bypass hanya penanganan opsional saat skrip diblokir, dibatasi sesi Process, tanpa Force wajib. Tidak ada perubahan kode aplikasi atau deployment.

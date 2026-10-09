@@ -2,6 +2,14 @@
 
 Tanggal: 8 Oktober 2026. Lingkungan: Windows pengembang, Python 3.12.14, Node.js 24, dependensi sesuai lockfile. Bukti ini memisahkan tes lokal dengan AI tiruan dari verifikasi menggunakan OpenAI nyata.
 
+## Perkenalan dan sapaan — 9 Oktober 2026
+
+Perkenalan seperti “kamu siapa?”, “kamu ini apa?”, “SIRA siapa?”, pertanyaan kepanjangan/fungsi, serta sapaan “oy SIRA” memakai respons profesional tetap tanpa request AI. Nama resmi dan fungsi dijelaskan tanpa klaim fakta dokumen atau referensi buatan. Jalur ini tersedia saat KB kosong dan tetap menyimpan pesan dalam riwayat, tetapi tidak mengganti topik dokumen untuk pertanyaan lanjutan.
+
+Pencocokan harus mencakup seluruh pesan. Pertanyaan dokumen atau instruksi tambahan tidak diserap oleh jalur perkenalan; payload lengkap tetap melewati retrieval dan kebijakan relay lama. Tujuh tes integrasi perkenalan/sapaan lulus, mencakup AI tidak tersedia, KB kosong, pemulihan riwayat, follow-up, pesan campuran yang tetap wajib referensi, serta lima contoh instruksi mengambil alih aturan/peran. Tes memakai AI tiruan untuk membuktikan routing dan persistensi; tidak mengukur ketahanan jailbreak model OpenAI nyata. Tidak ada perubahan pada OCR, model, prompt relay, atau data pengguna; tidak ada request berbayar.
+
+Regresi penuh versi akhir: 90 tes backend lulus, 1 tes live opt-in dilewati; Ruff check backend/tests/scripts, format kedua file Python yang diubah, dan diff check lulus.
+
 ## Hasil yang sudah dijalankan
 
 | Pemeriksaan | Hasil |
