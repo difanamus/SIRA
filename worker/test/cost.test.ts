@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import { actualCost, reserveCost } from '../src/cost';
 import { prepare } from '../src/policy';
 
+test('mini chat reserves text costs while vision keeps its image allowance', () => {
+  const chat = prepare('/answer', {
+    question: 'Kapan kelulusan?',
+    history: [],
+    sources: [{ id: 'S1', title: 'Jadwal', page: 12, text: '23–26 November 2026.' }],
+  });
+  const bytes = new TextEncoder().encode(JSON.stringify(chat.body)).length;
+  assert.equal(reserveCost(chat), Math.ceil((bytes + 512) * 0.4 + 1800 * 1.6));
+  assert.equal(actualCost(chat, {
+    usage: { prompt_tokens: 1000, completion_tokens: 100 },
+  }), 560);
+  const image = 'data:image/jpeg;base64,YWJj';
+  assert.equal(reserveCost(prepare('/vision', { image })), 15000);
+  assert.equal(reserveCost(prepare('/vision', { image, layout: true })), 30000);
+});
+
 test('cost includes cached input and reasoning once, rounded upwards to micro-USD', () => {
   const image = 'data:image/jpeg;base64,YWJj';
   const sol = prepare('/vision-fragment', { image });

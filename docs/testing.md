@@ -210,3 +210,13 @@ SBP terbaru saat pemeriksaan memiliki tiga halaman wajib review (2,3,12), berbed
 Jalur `native-cells-v1` memetakan karakter PDF ke sel sumber; kotak latar tidak menjadi garis palsu. Ekstraksi Perpol asli menghasilkan 71 halaman/36 tabel/137 chunk tanpa OCR/vision, sekitar 15,16 detik. Dua belas halaman SBP tersimpan tetap identik; analisis baru halaman 12 memakai bukti yang sama dan identik dengan kode sebelum perubahan selain durasi.
 
 Seluruh backend: 101 lulus, satu live opt-in dilewati (57,89 detik). Setelah menambah regresi halaman yang memuat teks native dan gambar pada halaman yang sama, 12 tes native terarah lulus; total 102 tes unik terverifikasi. Ruff, format berkas berubah, diff check, dan build TypeScript/Vite lulus. Salinan pengguna sudah menerima perbaikan: Perpol siap setelah sekitar 29,73 detik termasuk 12 batch embedding asli/61.904 token, tanpa request vision/chat. SBP aktif beserta koreksi dan indeksnya dipertahankan. Rincian dan batasan: [native-pdf-tables.md](native-pdf-tables.md).
+
+## Penggantian model jawaban, 10 Oktober 2026
+
+Model `/answer` kini GPT-4.1 mini, menggantikan GPT-4o mini atas permintaan pengguna. Endpoint Chat Completions, prompt sistem, konteks, streaming, dan batas output tetap sama. OCR GPT-4.1 mini/GPT-5.6 Sol, embedding, retrieval dan data tidak berubah. Reservasi biaya chat dihitung dari input teks dan output; jatah gambar tetap hanya untuk vision. README, implementation plan, keterangan admin dan checklist diperbarui.
+
+Type check, 9 tes policy/biaya, 13 tes runtime pada bundel terbaru, dry-run dan build frontend lulus. Runtime/build awal terhalang sandbox Windows; pengulangan di luar sandbox berhasil. Tes runtime perlu dry-run terbaru agar tidak memeriksa bundel lama.
+
+Cloudflare aktif pada versi `93ea83a8-62e1-4cfe-84b9-6135ace37302`. Seluruh binding, termasuk Secrets, akses demo, expiry 30 Oktober dan pengaturan kuota, identik dengan versi sebelumnya. Satu request OpenAI nyata melalui relay selesai dalam 3,406 detik dengan model respons `gpt-4.1-mini-2025-04-14`. Sumber halaman 12 dari chunk SBP aktif diberikan langsung; jawaban menyebut 23–26 November 2026 dan [S1]. Tidak ada OCR, embedding atau retry OpenAI; penolakan awal endpoint instalasi terjadi sebelum OpenAI dan selesai setelah memakai user-agent aplikasi.
+
+Uji ini membuktikan koneksi/model baru dan satu jawaban berbasis sumber, bukan perbaikan retrieval atau jaminan akurasi umum. Ulangi pertanyaan dari percakapan baru melalui aplikasi untuk mengevaluasi seluruh alur. Bukti lokal tanpa credential: `tmp/chat-model-live-result.json`.

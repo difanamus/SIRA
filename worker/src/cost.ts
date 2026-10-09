@@ -12,7 +12,7 @@ export function reserveCost(prepared: Prepared): number {
   const model = String(prepared.body.model);
   // Vision inputs are patch/tile capped by these fixed models. These allowances
   // exceed the bounded two-image mini / one-image Sol inputs and output limits.
-  if (model === 'gpt-4.1-mini')
+  if (model === 'gpt-4.1-mini' && !prepared.streaming)
     return Number(prepared.body.max_completion_tokens) > 6000 ? 30000 : 15000;
   if (model === 'gpt-5.6-sol')
     return Number(prepared.body.max_completion_tokens) > 4000 ? 300000 : 150000;

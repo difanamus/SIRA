@@ -134,7 +134,7 @@ export function prepare(path: string, value: unknown): Prepared {
     return {
       upstream: 'chat/completions',
       body: {
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-mini',
         store: false,
         temperature: 0.1,
         max_completion_tokens: 1800,

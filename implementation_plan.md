@@ -31,7 +31,7 @@ Kedua dokumen pedoman tidak otomatis menjadi knowledge base. Instalasi baru dimu
 - Tambah dokumen, ubah metadata, ganti file dokumen, dan hapus dokumen.
 - Penyimpanan persisten untuk PDF, hasil ekstraksi, metadata, serta embedding/index.
 - Pipeline parsing, OCR bila diperlukan, chunking, embedding, retrieval, dan generasi jawaban.
-- GPT-4o mini sebagai satu-satunya model jawaban. OCR: lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada potongan yang masih meragukan (keputusan pengguna 8 Oktober 2026).
+- GPT-4.1 mini sebagai satu-satunya model jawaban. OCR: lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada potongan yang masih meragukan (keputusan OCR 8 Oktober 2026; model jawaban diperbarui 10 Oktober 2026).
 - Konteks dan riwayat satu percakapan persisten untuk pertanyaan lanjutan; dipulihkan saat refresh/buka ulang dan dihapus hanya melalui Percakapan baru (keputusan pengguna 8 Oktober 2026).
 - Jawaban sopan dan profesional, disertai referensi dokumen berupa teks biasa.
 - Jawaban streaming dan penanganan kesalahan yang dapat dipahami pengguna.
@@ -62,7 +62,7 @@ Tidak ada link PDF atau fasilitas download dokumen untuk pengguna chat. Tanpa kl
 | OCR lokal | Tesseract, bahasa Indonesia dan Inggris | Ekstraksi teks scan; kualitas dibuktikan pada bahan uji |
 | Preprocessing | Pillow/OpenCV sesuai kebutuhan | Rotasi, deskew, kontras, dan penyesuaian gambar tanpa mengubah substansi |
 | Tokenisasi | tiktoken | Pengukuran ukuran chunk dan anggaran konteks |
-| Model jawaban | OpenAI GPT-4o mini | Jawaban berbasis evidence |
+| Model jawaban | OpenAI GPT-4.1 mini | Jawaban berbasis evidence |
 | OCR AI | GPT-4.1 mini, fallback GPT-5.6 Sol | Mini memeriksa scan; Sol hanya potongan yang masih meragukan |
 | Model embedding | OpenAI text-embedding-3-small | Embedding chunk dan pertanyaan |
 | Relay AI | Cloudflare Workers, TypeScript, Secrets | Menjaga API key OpenAI di server dan membatasi permintaan AI |
@@ -90,7 +90,7 @@ Cloudflare Worker milik peserta
   |-- Autentikasi akses pengujian, batas penggunaan, validasi operasi/model
   |-- API key OpenAI melalui Secrets
   |
-OpenAI: embedding, GPT-4o mini untuk chat, GPT-4.1 mini dan fallback GPT-5.6 Sol untuk OCR
+OpenAI: embedding, GPT-4.1 mini untuk chat, GPT-4.1 mini dan fallback GPT-5.6 Sol untuk OCR
 ```
 
 - UI dan backend aplikasi dijalankan pada localhost; hasil build React dilayani FastAPI agar penguji tidak perlu menjalankan server frontend terpisah.
@@ -178,7 +178,7 @@ Alur pertanyaan normal:
 3. Buat query embedding melalui Worker dan OpenAI.
 4. Cari kandidat chunk di Chroma dengan pembatasan versi dokumen aktif.
 5. Periksa relevansi, susun konteks secukupnya, dan pertahankan metadata sumber. Nilai similarity bukan probabilitas kebenaran; ambang dikalibrasi lewat evaluasi.
-6. Kirim pertanyaan, konteks sumber, dan riwayat yang dibatasi ke GPT-4o mini melalui Worker.
+6. Kirim pertanyaan, konteks sumber, dan riwayat yang dibatasi ke GPT-4.1 mini melalui Worker.
 7. Teruskan jawaban streaming sampai UI. Referensi diformat aplikasi dari metadata yang valid, bukan menerima path/link hasil karangan model.
 8. Catat metrik latensi tanpa merekam isi dokumen/chat secara default.
 
@@ -322,7 +322,7 @@ Tidak ada keputusan produk yang menghalangi penyusunan rencana atau tahap fondas
 - Vite build: https://vite.dev/guide/build
 - Chroma PersistentClient: https://docs.trychroma.com/reference/python/client
 - Tesseract dan kualitas OCR: https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html
-- GPT-4o mini: https://developers.openai.com/api/docs/models/gpt-4o-mini
+- GPT-4.1 mini: https://developers.openai.com/api/docs/models/gpt-4.1-mini
 - GPT-4.1 mini, khusus opsi admin Baca dengan AI untuk scan gagal (disetujui 8 Oktober 2026): https://developers.openai.com/api/docs/models/gpt-4.1-mini
 - Model embedding: https://developers.openai.com/api/docs/models/text-embedding-3-small
 - OpenAI images/vision: https://developers.openai.com/api/docs/guides/images-vision
