@@ -167,6 +167,8 @@ Aturan penggunaan:
 
 ## Catatan progres
 
+- 9 Oktober 2026: UI chat desktop diringkas melalui CSS saja: topbar 44 piksel, header SIRA/tombol Percakapan baru disatukan, judul berulang serta panel keterangan kanan disembunyikan, dan chat mengikuti tinggi viewport. Pada 1440×900 area pesan naik dari sekitar 446 menjadi 642 piksel dan lebar 867 menjadi 1152 piksel. Verifikasi browser pada 1920×1080, 1440×900, 1280×720, 900×600, dan 721×600 lulus; input tetap terlihat tanpa overflow halaman. Ukuran layout mobile 390×650 identik dengan sebelum perubahan; navigasi admin/chat baru lulus memakai fixture tanpa biaya AI. Build frontend dan Prettier lulus; tidak ada perubahan logika aplikasi.
+
 - 9 Oktober 2026: merapikan UI chat khusus mobile melalui CSS saja. Header berulang diringkas, tombol Percakapan baru ditempatkan pada header SIRA, area pesan mengikuti tinggi viewport dinamis, dan input tetap terlihat. Verifikasi browser pada 320×568, 390×650, 430×844, landscape 720×390, serta desktop 1440×1000 lulus tanpa overflow horizontal/error JavaScript. Pada 390×650 area pesan bertambah dari sekitar 293 menjadi 434 piksel; layout desktop cocok dengan ukuran sebelum perubahan. Tombol chat baru dan navigasi admin diuji memakai fixture tanpa biaya AI. Build frontend, Prettier, dan diff check lulus; tidak ada perubahan logika aplikasi.
 
 - 8 Oktober 2026: perencanaan, implementation plan, Git mandiri, `.gitignore`, dan checklist selesai. Repository berada pada branch `codex/setup`. Folder `/RAG SSDM/` dikecualikan melalui `.git/info/exclude` repository induk; tidak ada perubahan pada file proyek atau index induk. PDF sumber, data runtime, dan secrets tidak dilacak. Implementasi sudah diizinkan pengguna dan dilanjutkan.

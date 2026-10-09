@@ -1162,6 +1162,100 @@ textarea::placeholder {
     width: 20px;
   }
 }
+@media (min-width: 721px) {
+  /* Prioritize the conversation over repeated desktop headings and side notes. */
+  .shell:has(.chat-page) {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+  }
+  .shell:has(.chat-page) .sidebar {
+    height: 100%;
+    min-height: 0;
+  }
+  .shell:has(.chat-page) .main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .shell:has(.chat-page) .topbar {
+    flex: 0 0 44px;
+    height: 44px;
+    padding: 0 20px;
+  }
+  .shell:has(.chat-page) .main > .alert,
+  .chat-page > .alert {
+    flex-shrink: 0;
+  }
+  .chat-page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: none;
+    padding: 12px 20px 10px;
+    margin: 0;
+  }
+  .chat-page .page-heading {
+    position: absolute;
+    z-index: 1;
+    top: 22px;
+    right: 38px;
+    margin: 0;
+  }
+  .chat-page .page-heading > div {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .chat-page:has(> .alert) .page-heading {
+    position: static;
+    align-self: flex-end;
+    margin-bottom: 10px;
+  }
+  .chat-page .chat-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .chat-page .context-panel {
+    display: none;
+  }
+  .chat-page .chat-card {
+    flex: 1;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+  .chat-page .chat-card-header {
+    flex: 0 0 58px;
+    padding: 10px 170px 10px 18px;
+  }
+  .chat-page .messages {
+    min-height: 0;
+    overscroll-behavior-y: contain;
+    padding: 20px 22px;
+  }
+  .chat-page .composer {
+    flex-shrink: 0;
+    padding: 12px 18px 10px;
+  }
+  .chat-page .page-footnote {
+    flex-shrink: 0;
+    margin-top: 8px;
+    line-height: 14px;
+  }
+}
 @media (max-width: 720px) {
   .shell {
     display: block;
