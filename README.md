@@ -171,6 +171,7 @@ Runtime test memerlukan hasil bundel `worker/dist/index.js`; seluruh tes memakai
 
 | Masalah | Langkah |
 | --- | --- |
+| `SyntaxError` diikuti `Unduhan tabel tokenizer gagal` pada setup lama | Gunakan `setup.ps1` terbaru yang mengirim kode Python melalui stdin agar kompatibel dengan Windows PowerShell 5.1, lalu ulangi perintah setup dengan Python 3.12. Tidak perlu menghapus `.venv` atau `.env`; pesan `Requirement already satisfied` berarti dependensi sudah terpasang |
 | Koneksi AI otomatis gagal | Periksa internet dan masa akses demo, jalankan `.\.venv\Scripts\python.exe -m backend.setup_relay`, lalu restart; konfigurasi relay milik sendiri tetap dapat diisi manual |
 | Relay menolak akses | Periksa token, aktivasi, tanggal kedaluwarsa, dan kuota melalui pemilik relay |
 | OCR tidak tersedia | Jalankan setup OCR atau periksa path dan `tesseract --list-langs` |
