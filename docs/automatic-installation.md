@@ -20,7 +20,7 @@ Token demo berbeda dari token privat yang sudah dipakai pemilik. API key OpenAI 
 
 Demo memakai autentikasi token, operasi dan model fixed, validasi payload, masa berlaku, serta counter/proteksi per menit yang sama dengan relay sebelumnya. Tidak ada bypass/clear counter. Batas kumulatif tetap nonaktif sesuai keputusan pemilik sebelumnya. Pemakaian pihak lain dapat menyebabkan biaya OpenAI dan memakai kapasitas proteksi per menit bersama.
 
-Masa akses saat aktivasi: **16 Oktober 2026 pukul 10.42 WIB**, tepat `2026-10-16T03:42:55Z`. Data lokal tidak dihapus ketika akses AI berakhir.
+Masa akses saat ini: **30 Oktober 2026 pukul 23.59 WIB**, tepat `2026-10-30T16:59:59Z`. Pemilik meminta perpanjangan pada 9 Oktober 2026 agar penguji tetap dapat mencoba setelah wawancara. Token instalasi yang sudah terpasang tetap sama; tidak perlu setup ulang. Data lokal tidak dihapus ketika akses AI berakhir.
 
 ## Aktivasi dan pencabutan oleh pemilik
 
@@ -53,3 +53,9 @@ Mematikan seluruh relay dapat dilakukan melalui `RELAY_ENABLED=false` sesuai pan
 - Scan kandidat source/dokumentasi tidak menemukan token privat atau token demo aktual; file token/config release tetap diabaikan Git. Pengujian tidak mengklaim bahwa token demo publik merupakan rahasia.
 
 Bukti lokal berada di `tmp/automatic-install-live/` dan skrip `tmp/automatic-install-live-check.py`, diabaikan Git. Uji memakai runtime/dependensi yang sudah ada di PC pengembang; ini membuktikan bootstrap dan integrasi dari konfigurasi/data kosong, bukan instalasi seluruh dependensi pada Windows bersih atau keberhasilan pada setiap laptop.
+
+## Perpanjangan akses sampai 30 Oktober 2026
+
+Atas permintaan pemilik, expiry diperpanjang dari 16 Oktober menjadi **30 Oktober 2026 pukul 23.59 WIB** (`2026-10-30T16:59:59Z`). Deployment aktif hasil perubahan: `22e13371-660a-40a7-bbb7-b6a186a32c17`. Endpoint instalasi sudah mengembalikan tanggal baru. Token demo yang diperoleh sebelum perubahan tetap identik; seluruh binding selain expiry, termasuk secrets, counter dan proteksi per menit, dipertahankan. Tidak ada request OpenAI pada deployment/verifikasi endpoint. Instalasi yang sudah memiliki URL/token tidak perlu setup ulang atau restart untuk memakai masa akses baru.
+
+Verifikasi tambahan: konfigurasi instalasi kosong berhasil mengambil masa akses baru; menjalankan bootstrap kedua kali mempertahankan konfigurasi yang ada. Token privat dan demo diterima pada relay dengan payload embedding sengaja tidak valid (400 sebelum OpenAI). Dua belas tes bootstrap lulus. Tidak ada request AI berbayar, OCR, atau indexing ulang. Bukti lokal: `tmp/expiry-extension-result.json` dan snapshot binding sebelum/sesudah, diabaikan Git.

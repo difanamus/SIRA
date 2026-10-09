@@ -49,6 +49,8 @@ Relay sudah dipulihkan ke versi **ff6e5a0e-1d8f-4d08-bdae-8a4663c81c69**, batas 
 
 ## Pembaruan: pemilik meminta batas total dihapus
 
+Catatan 9 Oktober 2026: masa demo yang semula berakhir 16 Oktober pada laporan historis di bawah sudah diperpanjang sampai **30 Oktober 2026 pukul 23.59 WIB**, tanpa mengubah token atau counter. Lihat [instalasi otomatis](automatic-installation.md).
+
 Setelah chat ikut tertahan, pemilik secara eksplisit meminta “gak usah dibatas-batasin”. Pada 8 Oktober 2026, versi **b0ada031-35af-436e-929c-c7ccdcd0105f** dideploy dengan `TOTAL_QUOTA_ENABLED=false`. Seluruh endpoint AI tidak lagi memeriksa batas kumulatif request/unit maupun anggaran uji aplikasi. Nilai/ID anggaran lama tetap tersimpan untuk riwayat dan tidak direset. Mode kuota uji masih tersedia jika pemilik mengaktifkannya kembali. Autentikasi, validasi operasi/model/payload, proteksi 30 request/menit, serta expiry 16 Oktober 2026 pukul 03:42:55 UTC tetap berlaku. Pemakaian kini mengikuti saldo/batas penyedia dan ditagihkan sesuai penggunaan akun.
 
 Verifikasi: type check, 7 tes policy/biaya, 10 runtime Worker, dan build dry-run lulus. Percobaan runtime awal pada sandbox ditolak akses SQLite Windows; rerun dengan izin runtime lokal lulus. Tes baru memastikan semua endpoint melewati nilai total request/unit/biaya yang sangat kecil saat mode dimatikan, tetapi request keenam tetap ditolak oleh rate limit lima/menit pada fixture, dan override payload klien tetap ditolak.

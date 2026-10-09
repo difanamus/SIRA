@@ -2,6 +2,8 @@
 
 Tanggal: 9 Oktober 2026. Pemeriksaan ini tidak mengubah kode, akun, isi knowledge base, atau konfigurasi relay. Tidak ada request OpenAI maupun deployment Cloudflare.
 
+Catatan pembaruan setelah audit: instalasi otomatis penguji telah diterapkan, dan pada 9 Oktober 2026 pemilik memperpanjang demo sampai **30 Oktober 2026 pukul 23.59 WIB**. Temuan tentang distribusi token dan expiry 16 Oktober di bawah merupakan kondisi saat audit awal. Status terbaru ada di [panduan instalasi otomatis](automatic-installation.md).
+
 ## Dasar pemeriksaan
 
 - `Soal RAG.pdf`: seluruh 3 halaman dibaca melalui ekstraksi teks dan render gambar.

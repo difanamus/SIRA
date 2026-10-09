@@ -7,7 +7,7 @@ compatibility_date = "2026-10-01"
 RELAY_ENABLED = "false"
 # Owner enables public automatic installation only on the deployed exam relay.
 INSTALLATION_ACCESS_ENABLED = "false"
-RELAY_EXPIRES_AT = "2026-10-16T03:42:55Z"
+RELAY_EXPIRES_AT = "2026-10-30T16:59:59Z"
 MAX_REQUESTS = "1000"
 MAX_TOKEN_UNITS = "2000000"
 REQUESTS_PER_MINUTE = "30"
