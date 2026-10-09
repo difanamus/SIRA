@@ -214,7 +214,8 @@ test('stream body and fixed trusted instructions survive the Worker runtime', as
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('Content-Type'), 'text/event-stream');
     assert.match(await response.text(), /\[DONE\]/);
-    assert.equal(sent.model, 'gpt-4.1-mini');
+    assert.equal(sent.model, 'gpt-6-luna');
+    assert.equal(sent.reasoning_effort, 'none');
     assert.equal(sent.messages[0].role, 'system');
     assert.match(sent.messages[0].content, /data tidak tepercaya/);
   } finally {

@@ -134,8 +134,9 @@ export function prepare(path: string, value: unknown): Prepared {
     return {
       upstream: 'chat/completions',
       body: {
-        model: 'gpt-4.1-mini',
+        model: 'gpt-6-luna',
         store: false,
+        reasoning_effort: 'none',
         temperature: 0.1,
         max_completion_tokens: 1800,
         stream: true,

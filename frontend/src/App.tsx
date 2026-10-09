@@ -939,8 +939,8 @@ function Admin({ health }: { health: Health | null }) {
                 Pemeriksaan lokal berjalan tanpa menunggu AI. Halaman yang meragukan dan tabel
                 dibaca langsung dari gambar asli oleh GPT-4.1 mini. Hubungan baris, kolom, dan sel
                 gabungan ikut diperiksa. GPT-5.6 Sol membaca bagian yang belum jelas; hasil yang
-                tetap meragukan masuk review admin. Bantuan AI berbayar. Model chatbot memakai GPT-4.1
-                mini.
+                tetap meragukan masuk review admin. Bantuan AI berbayar. Model chatbot memakai GPT-6
+                Luna.
               </p>
               <div className="development-note">
                 <span>REVIEW OLEH ADMIN</span>

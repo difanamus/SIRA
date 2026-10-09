@@ -2,6 +2,8 @@ import type { Prepared } from './policy';
 
 // Micro-USD rates per token, checked against the model price pages on 2026-10-08.
 const rates: Record<string, [number, number, number]> = {
+  // Luna standard prices checked on 2026-10-10.
+  'gpt-6-luna': [0.1, 0.01, 0.5],
   'gpt-4o-mini': [0.15, 0.075, 0.6],
   'gpt-4.1-mini': [0.4, 0.1, 1.6],
   'gpt-5.6-sol': [4, 0.4, 20],
@@ -17,9 +19,11 @@ export function reserveCost(prepared: Prepared): number {
   if (model === 'gpt-5.6-sol')
     return Number(prepared.body.max_completion_tokens) > 4000 ? 300000 : 150000;
   const [input, , output] = rates[model];
+  // Allow for Luna cache writes, billed at 1.25x ordinary input.
+  const reservedInput = model === 'gpt-6-luna' ? input * 1.25 : input;
   const bytes = new TextEncoder().encode(JSON.stringify(prepared.body)).length;
   return Math.ceil(
-    (bytes + 512) * input + Number(prepared.body.max_completion_tokens ?? 0) * output,
+    (bytes + 512) * reservedInput + Number(prepared.body.max_completion_tokens ?? 0) * output,
   );
 }
 

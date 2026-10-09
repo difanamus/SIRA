@@ -4,6 +4,8 @@ Terakhir diperbarui: 10 Oktober 2026.
 
 Pedoman detail: [implementation_plan.md](implementation_plan.md).
 
+- [x] 10 Oktober 2026: model jawaban kembali diperbarui sesuai pilihan pengguna menjadi GPT-6 Luna. Mode reasoning `none` mempertahankan karakter chat cepat sebelumnya. Type check, 9 tes policy/biaya, 13 tes runtime, dry-run serta build frontend lulus; Cloudflare aktif dan satu request nyata mengonfirmasi model Luna. OCR, retrieval, embedding, prompt, data dan seluruh binding relay dipertahankan. Bukti dan batas pengujian di `docs/testing.md`.
+
 - [x] 10 Oktober 2026: model jawaban diganti dari GPT-4o mini ke GPT-4.1 mini dan diterapkan ke relay Cloudflare. Prompt, retrieval, embedding, serta alur OCR dipertahankan. Type check, 9 tes policy/biaya, 13 tes runtime, dry-run dan build UI lulus. Satu request nyata mengonfirmasi model `gpt-4.1-mini-2025-04-14` dan jawaban tanggal SBP 23–26 November 2026 saat sumber halaman 12 diberikan langsung. Ini belum membuktikan perbaikan retrieval. Detail di `docs/testing.md`.
 
 Aturan penggunaan:

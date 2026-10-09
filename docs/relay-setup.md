@@ -1,6 +1,6 @@
 # Relay pengujian Cloudflare
 
-Petunjuk ini untuk peserta/pemilik akun. Penguji cukup memasang aplikasi lokal dan menerima akses relay. Model yang ditetapkan server: GPT-4.1 mini untuk jawaban, GPT-4.1 mini untuk bantuan OCR, GPT-5.6 Sol untuk fallback crop meragukan, dan text-embedding-3-small untuk embedding. Klien tidak dapat menentukan model arbitrer. Atas permintaan pemilik pada 8 Oktober 2026, batas kumulatif request, unit, dan biaya aplikasi dinonaktifkan; autentikasi, proteksi spam per menit, serta masa berlaku tetap aktif.
+Petunjuk ini untuk peserta/pemilik akun. Penguji cukup memasang aplikasi lokal dan menerima akses relay. Model yang ditetapkan server: GPT-6 Luna untuk jawaban, GPT-4.1 mini untuk bantuan OCR, GPT-5.6 Sol untuk fallback crop meragukan, dan text-embedding-3-small untuk embedding. Klien tidak dapat menentukan model arbitrer. Atas permintaan pemilik pada 8 Oktober 2026, batas kumulatif request, unit, dan biaya aplikasi dinonaktifkan; autentikasi, proteksi spam per menit, serta masa berlaku tetap aktif.
 
 ## Setup dengan skrip
 

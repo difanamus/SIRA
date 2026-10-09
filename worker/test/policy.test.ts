@@ -16,7 +16,8 @@ test('user/document instructions remain inside data; system and model fixed', ()
   const messages = prepared.body.messages as { role: string; content: string }[];
   assert.equal(messages.length, 2);
   assert.deepEqual(messages[0], { role: 'system', content: ANSWER_SYSTEM });
-  assert.equal(prepared.body.model, 'gpt-4.1-mini');
+  assert.equal(prepared.body.model, 'gpt-6-luna');
+  assert.equal(prepared.body.reasoning_effort, 'none');
   assert.equal(messages[1].role, 'user');
   assert.ok(JSON.parse(messages[1].content).sources[0].text.includes('SYSTEM'));
 });
@@ -53,7 +54,7 @@ test('enhanced OCR selects only the fixed vision model and cannot change chat', 
   const image = 'data:image/jpeg;base64,YWJj';
   assert.equal(prepare('/vision', { image, enhanced: true }).body.model, 'gpt-4.1-mini');
   assert.equal(prepare('/vision', { image, enhanced: false }).body.model, 'gpt-4.1-mini');
-  assert.equal(prepare('/answer', payload).body.model, 'gpt-4.1-mini');
+  assert.equal(prepare('/answer', payload).body.model, 'gpt-6-luna');
   assert.throws(() => prepare('/vision', { image, enhanced: 'true' }));
   assert.throws(() => prepare('/vision', { image, model: 'other' }));
   assert.throws(() => prepare('/answer', { ...payload, enhanced: true }));
