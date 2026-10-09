@@ -507,24 +507,26 @@ export function DocumentReview({
               />
               <p className="document-meta">
                 Sumber teks:{' '}
-                {selected.method === 'manual'
-                  ? 'Koreksi admin'
-                  : selected.method === 'ocr-regions-draft' ||
-                      selected.method === 'ocr-layout-draft-v3'
-                    ? 'Draft OCR bertahap; perlu review'
-                    : selected.method.includes('5.6-sol')
-                      ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'
-                      : selected.method.includes('4.1')
-                        ? 'GPT-4.1 mini'
-                        : selected.method.includes('vision')
-                          ? 'OCR dan AI'
-                          : selected.method.startsWith('ocr')
-                            ? 'OCR lokal'
-                            : selected.method === 'text'
-                              ? 'PDF teks'
-                              : selected.method === 'blank'
-                                ? 'Halaman kosong'
-                                : 'Perlu diisi manual'}{' '}
+                {selected.method === 'native-cells-v1'
+                  ? 'Teks dan tabel dari PDF asli'
+                  : selected.method === 'manual'
+                    ? 'Koreksi admin'
+                    : selected.method === 'ocr-regions-draft' ||
+                        selected.method === 'ocr-layout-draft-v3'
+                      ? 'Draft OCR bertahap; perlu review'
+                      : selected.method.includes('5.6-sol')
+                        ? 'OCR → GPT-4.1 mini → GPT-5.6 Sol (bagian tertentu)'
+                        : selected.method.includes('4.1')
+                          ? 'GPT-4.1 mini'
+                          : selected.method.includes('vision')
+                            ? 'OCR dan AI'
+                            : selected.method.startsWith('ocr')
+                              ? 'OCR lokal'
+                              : selected.method === 'text' || selected.method === 'text-layout-v3'
+                                ? 'PDF teks'
+                                : selected.method === 'blank'
+                                  ? 'Halaman kosong'
+                                  : 'Perlu diisi manual'}{' '}
                 · {text.length.toLocaleString('id-ID')} karakter
               </p>
               <p className="review-warning">{selected.warning}</p>

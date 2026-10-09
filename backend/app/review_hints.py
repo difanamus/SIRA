@@ -20,6 +20,8 @@ def review_hints(page, regions, plan=None):
     hints = []
     for region in regions:
         state = json.loads(region.get("state") or "{}")
+        if state.get("superseded_by_native") and page.get("method") == state["superseded_by_native"]:
+            continue
         bounds = state.get("bbox", [0, region["top"], 1, region["bottom"]])
         try:
             bbox(bounds)

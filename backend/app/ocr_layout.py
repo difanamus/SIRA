@@ -159,14 +159,14 @@ def overlap(first, second):
     return intersection / max(0.00001, (c - a) * (d - b) + (z - x) * (q - y) - intersection)
 
 
-def validate_table(block, grid=None):
+def validate_table(block, grid=None, *, maximum_columns=30):
     rows, columns = block.get("rows"), block.get("columns")
     cells = block.get("cells")
     if (
         type(rows) is not int
         or type(columns) is not int
         or not 1 <= rows <= 300
-        or not 1 <= columns <= 30
+        or not 1 <= columns <= maximum_columns
         or rows * columns > 4000
     ):
         return "Jumlah baris/kolom tabel tidak valid."

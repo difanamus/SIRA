@@ -16,6 +16,7 @@ from PIL import ImageFilter, ImageOps
 
 from .ai import AIError, OCRFormatError
 from .ingestion import critical_signature, image_payload, readable, render_page
+from .native_pdf import NATIVE_LAYOUT, find_native_tables, native_layout
 from .ocr_layout import bbox, block_text, detect_tables, overlap, validate_table
 
 log = logging.getLogger("sira.ocr")
@@ -236,17 +237,75 @@ class DocumentOCR:
             return None
         if self.version["ocr_mode"] == "manual" or row["method"] in {"manual-reviewed-v1", "blank"}:
             return row
+        if row["method"] == NATIVE_LAYOUT:
+            return row if not self.force else None
+        job = self.db.one("SELECT plan FROM ocr_page_jobs WHERE version_id=? AND page=?", (self.id, number))
+        if job and not self.force:
+            plan = json.loads(job["plan"])
+            if self.old_native_plan(plan):
+                return None
         if row["method"].endswith(PIPELINE) and not (self.force and row["method"] == "ocr-local-layout-v3"):
             return row
         # Existing narrative text is reusable; old flattened OCR/table text must
         # be analyzed again, without modifying already-active document versions.
         return None
 
+    @staticmethod
+    def old_native_plan(plan):
+        return (
+            not plan.get("native_source")
+            and "tabel" in plan.get("flags", [])
+            and not plan.get("words")
+            and set(plan["flags"]) <= {"tabel", "pembacaan AI diminta admin"}
+        )
+
+    def save_native(self, number, result, table_count, started):
+        flags = ["struktur tabel native belum lengkap"] if result["failures"] else []
+        plan = {
+            "pipeline": PIPELINE,
+            "native_source": NATIVE_LAYOUT,
+            "native_blocks": result["blocks"],
+            "native_table_count": table_count,
+            "zones": result["zones"],
+            "text": result["text"],
+            "words": result["words"],
+            "tables": [],
+            "flags": flags,
+            "confidence": None,
+            "local_ms": round((time.monotonic() - started) * 1000),
+        }
+        self.db.execute(
+            "INSERT OR REPLACE INTO ocr_page_jobs(version_id,page,plan,status) VALUES (?,?,?,?)",
+            (self.id, number, json.dumps(plan, ensure_ascii=False), "queued" if flags else "done"),
+        )
+        if not flags:
+            self.page(number, result["text"], NATIVE_LAYOUT)
+            self.db.execute(
+                "UPDATE review_pages SET text=?,method=?,warning='',required=0,confirmed=0 "
+                "WHERE version_id=? AND number=? AND revision=0",
+                (result["text"], NATIVE_LAYOUT, self.id, number),
+            )
+            # Retain paid historical readings, but they no longer describe the
+            # accepted native text. Never present their old warnings as current.
+            for region in self.db.rows("SELECT * FROM ocr_regions WHERE version_id=? AND page=?", (self.id, number)):
+                state = json.loads(region["state"])
+                state["superseded_by_native"] = NATIVE_LAYOUT
+                self.db.execute(
+                    "UPDATE ocr_regions SET state=?,required=0 WHERE version_id=? AND page=? AND number=?",
+                    (json.dumps(state, ensure_ascii=False), self.id, number, region["number"]),
+                )
+        return plan
+
     def analyze(self, page, number):
         existing = self.db.one("SELECT plan FROM ocr_page_jobs WHERE version_id=? AND page=?", (self.id, number))
         if existing:
             plan = json.loads(existing["plan"])
-            if plan.get("pipeline") == PIPELINE and "zones" in plan:
+            if (
+                plan.get("pipeline") == PIPELINE
+                and "zones" in plan
+                and not (not self.force and self.old_native_plan(plan))
+                and not (self.force and plan.get("native_source"))
+            ):
                 if self.force and "pembacaan AI diminta admin" not in plan["flags"]:
                     plan["flags"].append("pembacaan AI diminta admin")
                     for zone in plan["zones"]:
@@ -264,6 +323,22 @@ class DocumentOCR:
         # does not mean the relationships between cells survived extraction.
         native_tables = page.find_tables() if page.lines or page.rects else []
         image_heavy = sum(im["width"] * im["height"] for im in page.images) > page.width * page.height * 0.5
+        # A readable native caption must not hide a sizeable scanned region.
+        mixed_image = bool(native.strip()) and any(
+            im["width"] * im["height"] > page.width * page.height * 0.05 for im in page.images
+        )
+        image_heavy |= mixed_image
+        if readable(native) and native_tables and not image_heavy and not self.force:
+            try:
+                tables = find_native_tables(page)
+                result = native_layout(page, tables)
+                if len(result["text"]) > 100_000:
+                    raise AIError(f"Halaman {number}: teks terlalu panjang. Pisahkan dokumen.")
+                return self.save_native(number, result, len(tables), started)
+            except ValueError:
+                # Unresolved geometry still uses the established image reader;
+                # readable PDF text alone is not an acceptance guarantee.
+                pass
         image = None
         words, tables, flags = [], [], []
         confidence = 100
@@ -386,8 +461,10 @@ class DocumentOCR:
                     "SELECT * FROM ocr_regions WHERE version_id=? AND page=? AND number=?", (self.id, number, part)
                 )
                 state = json.loads(prior["state"]) if prior else {}
-                if state.get("input_layout") != "source-zones-v1":
-                    state = {"pipeline": PIPELINE, "input_layout": "source-zones-v1"}
+                input_layout = NATIVE_LAYOUT if plan.get("native_source") else "source-zones-v1"
+                if state.get("input_layout") != input_layout:
+                    state = {"pipeline": PIPELINE, "input_layout": input_layout}
+                requires_table = bool(zone["grid"] or zone.get("table_required"))
                 if state.get("done") and state.get("validator") == VALIDATOR:
                     texts.append(prior["text"])
                     unresolved |= bool(prior["required"])
@@ -406,7 +483,7 @@ class DocumentOCR:
                         problems.append(issue(block, plan))
                         if block["kind"] == "table" and zone["grid"]:
                             problems.append(validate_table(block, zone["grid"]))
-                    if zone["grid"] and sum(b["kind"] == "table" for b in final_blocks) != 1:
+                    if requires_table and sum(b["kind"] == "table" for b in final_blocks) != 1:
                         problems.append("Tabel belum dibaca secara utuh.")
                     problem = "; ".join(dict.fromkeys(p for p in problems if p))
                     text = "\n\n".join(block_text(block, part) for block in final_blocks)
@@ -458,7 +535,7 @@ class DocumentOCR:
                         if block["kind"] == "table" and zone["grid"]:
                             problem = validate_table(block, zone["grid"]) or problem
                         problems.append(problem)
-                    if zone["grid"] and sum(b["kind"] == "table" for b in blocks) != 1:
+                    if requires_table and sum(b["kind"] == "table" for b in blocks) != 1:
                         problems = ["Tabel belum dibaca secara utuh."] * max(1, len(blocks))
                     if not blocks:
                         problems = ["Struktur AI belum lengkap; cocokkan draft dengan gambar sumber."]
@@ -485,7 +562,7 @@ class DocumentOCR:
                         # retained even when one merged cell causes the dispute.
                         disputed = [b for i, b in enumerate(blocks) if i < len(problems) and problems[i]]
                         sol_bounds = bounds
-                        if disputed and not zone["grid"]:
+                        if disputed and not requires_table:
                             sol_bounds = [
                                 min(b["bbox"][0] for b in disputed),
                                 min(b["bbox"][1] for b in disputed),
@@ -494,7 +571,7 @@ class DocumentOCR:
                             ]
                         if "sol" in state:
                             sol_bounds = state.get("sol_bbox", sol_bounds)
-                        if "sol" in state or zone["grid"] or sol_bounds[3] - sol_bounds[1] < 0.75:
+                        if "sol" in state or requires_table or sol_bounds[3] - sol_bounds[1] < 0.75:
                             sol_crop = image.crop(
                                 (
                                     round(sol_bounds[0] * image.width),
@@ -507,7 +584,7 @@ class DocumentOCR:
                             method, sol_used = "ocr+4.1-mini+5.6-sol-layout-v3", True
                             try:
                                 replacements = copy.deepcopy(valid_blocks(final))
-                                if zone["grid"] and sum(b["kind"] == "table" for b in replacements) != 1:
+                                if requires_table and sum(b["kind"] == "table" for b in replacements) != 1:
                                     raise OCRFormatError("Tabel belum ditemukan dengan utuh pada pembacaan Sol.")
                                 final_problems = []
                                 sol_zone = {"bbox": sol_bounds, "grid": zone["grid"]}
@@ -584,7 +661,7 @@ class DocumentOCR:
                     self.progress(
                         local=True,
                         queued=bool(plan and plan["flags"]),
-                        tables=len(plan["tables"]) if plan else 0,
+                        tables=plan.get("native_table_count", len(plan["tables"])) if plan else 0,
                         areas=sum(zone["ai"] for zone in plan["zones"]) if plan and plan["flags"] else 0,
                     )
                     if plan and plan["flags"]:

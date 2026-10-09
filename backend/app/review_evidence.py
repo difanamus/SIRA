@@ -14,7 +14,9 @@ DATE = re.compile(
 
 def score(words):
     values = [
-        w["confidence"] for w in words if isinstance(w.get("confidence"), (int, float)) and 0 <= w["confidence"] <= 100
+        w["confidence"]
+        for w in words
+        if w.get("source") != "native" and isinstance(w.get("confidence"), (int, float)) and 0 <= w["confidence"] <= 100
     ]
     return round(sum(values) / len(values), 1) if values else None
 
@@ -30,6 +32,8 @@ def page_evidence(page, regions, plan=None):
         if region["number"] <= 0:
             continue
         state = json.loads(region.get("state") or "{}")
+        if state.get("superseded_by_native") and page.get("method") == state["superseded_by_native"]:
+            continue
         bounds = state.get("bbox", [0, region["top"], 1, region["bottom"]])
         local_words = [
             w

@@ -8,6 +8,8 @@ Halaman chat berada di `/`, halaman pengelolaan dokumen di `/admin`. Referensi j
 
 SIRA menjawab sapaan dan pertanyaan perkenalan seperti “kamu siapa?”, “SIRA itu apa?”, dan “oy SIRA” secara sopan tanpa request AI, termasuk saat knowledge base masih kosong. Perkenalan tidak mengganti konteks pertanyaan dokumen. Jalur ini hanya menerima pesan lengkap yang cocok dengan pola perkenalan; pesan yang juga memuat pertanyaan dokumen atau instruksi lain tetap mengikuti alur RAG dan pemeriksaan yang sudah ada.
 
+PDF teks dengan tabel dibaca melalui posisi karakter dan batas sel asli, termasuk sel gabungan. Tabel tidak otomatis memerlukan AI atau review manual. Jika struktur native belum lengkap, bagian bermasalah tetap diperiksa lewat gambar asli. PDF scan tetap mengikuti OCR lokal → GPT-4.1 mini → GPT-5.6 Sol → review selektif jika belum lolos. **Proses ulang** dapat melanjutkan dokumen gagal yang sempat dibuka untuk review; koreksi manusia tetap disimpan. Detail: [ekstraksi tabel native](docs/native-pdf-tables.md).
+
 ## Kebutuhan
 
 - Windows 64-bit, Python **3.12**, Node.js **24 LTS**, dan PowerShell.

@@ -358,7 +358,11 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
                 progress=0,
                 error="",
                 warning="",
-                ocr_mode="ai" if enhanced else version["ocr_mode"],
+                ocr_mode="ai"
+                if enhanced
+                else (
+                    "auto" if version["ocr_mode"] == "review" and not version["review_source"] else version["ocr_mode"]
+                ),
             )
             ctx.ingestion.enqueue(version["id"])
         return {"ok": True}
