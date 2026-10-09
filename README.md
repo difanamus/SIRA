@@ -17,15 +17,52 @@ Dependensi Python dan npm dikunci. Implementasi diuji pada lingkungan Windows pe
 
 ## Instalasi dan menjalankan
 
-Jalankan PowerShell di folder proyek:
+Ekstrak/unduh source ke folder proyek, lalu buka PowerShell di folder yang berisi `setup.ps1`. Periksa versi:
 
 ```powershell
-.\setup.ps1 -PythonPath 'C:\path\ke\Python312\python.exe'
+python --version
+node --version
+```
+
+Jika `python` menunjuk **Python 3.12.x** dan Node menunjukkan **v24.x**, jalankan:
+
+```powershell
+.\setup.ps1
 .\scripts\setup-ocr.ps1
 .\start.ps1
 ```
 
-`setup.ps1` membuat `.venv`, memasang dependensi, membangun frontend, menyiapkan tokenizer, dan meminta Anda membuat akun admin melalui terminal. Ganti contoh path Python di atas dengan lokasi Python 3.12 pada komputer Anda. Jika PowerShell memblokir skrip, jalankan skrip dengan `pwsh -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -PythonPath 'C:\path\ke\python.exe'` untuk proses tersebut.
+`setup.ps1` membuat `.venv`, memasang dependensi, membangun frontend, menyiapkan tokenizer, dan meminta Anda membuat akun admin melalui terminal. Setup juga mengisi koneksi Cloudflare otomatis selama masa akses demo aktif.
+
+### Jika komputer memiliki beberapa versi Python
+
+`-PythonPath` adalah **lokasi executable Python 3.12 pada komputer yang sedang memasang SIRA**. Path ini bukan lokasi Bypass dan tidak harus sama dengan komputer peserta. Jika launcher `py` dan Python 3.12 sudah terpasang, tampilkan lokasinya dengan:
+
+```powershell
+py -3.12 -c "import sys; print(sys.executable)"
+```
+
+Salin lokasi yang ditampilkan, lalu gunakan untuk setup. Contoh berikut adalah placeholder; **ganti dengan lokasi yang benar pada laptop Anda**:
+
+```powershell
+$python312 = 'C:\lokasi\Python312\python.exe'
+& $python312 --version
+.\setup.ps1 -PythonPath $python312
+```
+
+Pastikan pemeriksaan versi menghasilkan `Python 3.12.x`. Jika launcher tidak menemukan Python 3.12, pasang Python 3.12 terlebih dahulu atau gunakan lokasi instalasi 3.12 yang memang tersedia. Setelah setup selesai, lanjutkan skrip OCR dan `start.ps1` seperti di atas. Path khusus runtime Codex pada komputer peserta tidak diperlukan pada laptop penguji.
+
+### Hanya jika PowerShell memblokir skrip
+
+**Bypass bukan langkah instalasi wajib.** Jalankan skrip biasa terlebih dahulu. Jika muncul pesan seperti `running scripts is disabled` atau skrip diblokir oleh execution policy, dan kebijakan komputer Anda mengizinkannya, jalankan:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Setujui konfirmasi, kemudian jalankan kembali skrip setup/OCR/start pada jendela PowerShell yang sama. `Process` membuat perubahan berlaku pada sesi tersebut dan proses turunannya, tanpa mengubah kebijakan permanen; perubahan berakhir ketika sesi/proses itu ditutup. `-Force` hanya menghilangkan konfirmasi dan tidak diperlukan. Kebijakan organisasi melalui Group Policy tetap memiliki prioritas. Lihat [dokumentasi execution policy Microsoft](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies/).
+
+Untuk mencoba instalasi baru sambil aplikasi lama tetap berjalan, gunakan folder source terpisah dan jalankan `.\start.ps1 -Port 8001`. Buka `http://127.0.0.1:8001/admin`; folder data dan akun instalasi baru terpisah, serta penguji tetap membuat akun admin sendiri.
 
 ### Membuat akun admin pada instalasi pertama
 
