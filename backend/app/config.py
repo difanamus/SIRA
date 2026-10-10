@@ -31,6 +31,8 @@ class Settings:
     max_pages: int = field(default_factory=lambda: int(os.getenv("SIRA_MAX_PAGES", "300")))
     vision_enabled: bool = field(default_factory=lambda: os.getenv("SIRA_VISION_ENABLED", "true").lower() == "true")
     ocr_workers: int = field(default_factory=lambda: int(os.getenv("SIRA_OCR_WORKERS", "3")))
+    # Load the bundled sample knowledge base once on a fresh installation.
+    seed_enabled: bool = field(default_factory=lambda: os.getenv("SIRA_SEED_KB", "true").lower() == "true")
     max_upload: int = 100 * 1024 * 1024
     session_cache_ttl: int = 1800
 

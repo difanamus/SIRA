@@ -24,6 +24,7 @@ from .db import Database
 from .ingestion import Ingestion, render_page, save_upload
 from .review_evidence import review_page, verification_summary
 from .security import Limiter, check_origin, digest, hasher, require_admin, verify_password
+from .seed import apply_seed
 from .vectors import VectorStore
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -113,6 +114,10 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
         db = Database(settings.data_dir)
         db.recover()
         store = vectors or VectorStore(settings.data_dir)
+        try:
+            apply_seed(db, store, enabled=settings.seed_enabled)
+        except Exception:  # A broken seed must not block startup; the KB simply stays empty.
+            logging.getLogger("sira.seed").exception("seed_failed")
         ai = relay or Relay(settings)
         ingestion = Ingestion(settings, db, store, ai)
         ctx = SimpleNamespace(
@@ -320,6 +325,15 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
             raise HTTPException(503, "Layanan AI belum dikonfigurasi.")
         return retry_processing(document_id, request, enhanced=True)
 
+    def require_source_pdf(version):
+        # Bundled sample documents ship without their PDF files.
+        if not version["path"] or not Path(version["path"]).is_file():
+            raise HTTPException(
+                409,
+                "PDF asli dokumen ini tidak tersedia karena dimuat dari knowledge base bawaan. "
+                "Gunakan Ganti file untuk mengunggah PDF agar fitur ini dapat digunakan.",
+            )
+
     def retry_processing(document_id, request, enhanced=False):
         ctx = request.app.state.ctx
         with ctx.mutation_lock:
@@ -331,6 +345,7 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
                 if ctx.ingestion.jobs.qsize() >= 5:
                     raise HTTPException(429, "Antrean pemrosesan penuh.")
                 active = ctx.db.one("SELECT * FROM versions WHERE id=?", (doc["active_version"],))
+                require_source_pdf(active)
                 new_id = uuid.uuid4().hex
                 path = settings.data_dir / "documents" / (new_id + ".pdf")
                 shutil.copyfile(active["path"], path)
@@ -383,6 +398,7 @@ def create_app(settings=None, relay=None, vectors=None, start_ingestion=True):
                 # Snapshot accepted text and evidence; opening optional review
                 # never runs OCR, embeddings, or replaces the active version.
                 active = ctx.db.one("SELECT * FROM versions WHERE id=?", (doc["active_version"],))
+                require_source_pdf(active)
                 version_id = uuid.uuid4().hex
                 path = settings.data_dir / "documents" / (version_id + ".pdf")
                 try:

@@ -454,7 +454,8 @@ class Ingestion:
         ):
             try:
                 self.vectors.delete(row["id"])
-                Path(row["path"]).unlink(missing_ok=True)
+                if row["path"]:  # bundled seed versions have no PDF file
+                    Path(row["path"]).unlink(missing_ok=True)
                 with self.db.connect() as conn:
                     conn.execute("DELETE FROM chunks WHERE version_id=?", (row["id"],))
                     conn.execute("DELETE FROM pages WHERE version_id=?", (row["id"],))
