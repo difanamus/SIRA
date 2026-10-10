@@ -20,6 +20,8 @@ Pemeriksaan otomatis hanya mencocokkan kata/angka kunci, dokumen sumber, dan hal
 | SBP-10 | Tabel jadwal | Kapan keputusan kelulusan dan pengiriman surat panggil SBP 2027? | 23 s.d. 26 November 2026. | SBP 12 |
 | SBP-11 | Negasi | Apakah peserta seleksi SBP 2027 dipungut biaya? | Tidak dipungut biaya; bebas KKN. | SBP 10 |
 | SBP-12 | Angka | Berapa tambahan nilai akademis bagi peserta SBP lulusan S-2 dinas? | Ditambah 2 (S-2 non-dinas ditambah 1,50). | SBP 4 |
+| SBP-13 | Kelayakan kategori (informal) | kalo tamatan SMA bisa? | Bisa, dengan pangkat minimal Abripda MDDP 0 tahun (hal. 2). Syarat ijazah S-1/S-2/S-3 dan Bharaka MDDP 5/4/3 berlaku bagi pendaftar lulusan sarjana; formulir pendaftaran menyediakan isian khusus lulusan SMA/sederajat (hal. 8). | SBP 2, 8 |
+| SBP-14 | Kelayakan kategori | Apakah lulusan SMA dapat mendaftar seleksi SBP T.A. 2027? | Bisa, dengan pangkat minimal Abripda MDDP 0 tahun (hal. 2). Syarat ijazah S-1/S-2/S-3 dan Bharaka MDDP 5/4/3 berlaku bagi pendaftar lulusan sarjana; formulir pendaftaran menyediakan isian khusus lulusan SMA/sederajat (hal. 8). | SBP 2, 8 |
 | PERPOL-01 | Contoh soal | Bagaimana ketentuan penilaian kinerja anggota Polri? | Penilaian Kinerja dengan SMK bagi Bharada s.d. Komjen (Pasal 2), meliputi perencanaan, pelaksanaan dan pemantauan, pelaksanaan penilaian, evaluasi (Pasal 3); faktor spesifik dan generik. | Perpol 4, 9 |
 | PERPOL-02 | Angka | Berapa bobot Faktor Spesifik dan Faktor Generik dalam nilai akhir penilaian kinerja? | 60% Faktor Spesifik dan 40% Faktor Generik (Pasal 30 ayat 4). | Perpol 15 |
 | PERPOL-03 | Angka | Berapa rentang nilai akhir untuk kategori baik dalam penilaian kinerja anggota Polri? | 71 sampai dengan kurang dari 81 (Pasal 31). | Perpol 15 |

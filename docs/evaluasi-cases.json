@@ -199,6 +199,50 @@
   ]
  },
  {
+  "id": "SBP-13",
+  "kategori": "Kelayakan kategori (informal)",
+  "turns": [
+   "kalo tamatan SMA bisa?"
+  ],
+  "acuan": "Bisa, dengan pangkat minimal Abripda MDDP 0 tahun (hal. 2). Syarat ijazah S-1/S-2/S-3 dan Bharaka MDDP 5/4/3 berlaku bagi pendaftar lulusan sarjana; formulir pendaftaran menyediakan isian khusus lulusan SMA/sederajat (hal. 8).",
+  "halaman": "SBP 2, 8",
+  "expect": [
+   "Abripda",
+   "(bisa|dapat|boleh)"
+  ],
+  "forbid": [
+   "tidak memenuhi syarat",
+   "tidak (?:dapat|bisa|boleh) (?:mendaftar|mengikuti|ikut)",
+   "tidak menunjukkan"
+  ],
+  "sources": "SBP",
+  "pages": [
+   2
+  ]
+ },
+ {
+  "id": "SBP-14",
+  "kategori": "Kelayakan kategori",
+  "turns": [
+   "Apakah lulusan SMA dapat mendaftar seleksi SBP T.A. 2027?"
+  ],
+  "acuan": "Bisa, dengan pangkat minimal Abripda MDDP 0 tahun (hal. 2). Syarat ijazah S-1/S-2/S-3 dan Bharaka MDDP 5/4/3 berlaku bagi pendaftar lulusan sarjana; formulir pendaftaran menyediakan isian khusus lulusan SMA/sederajat (hal. 8).",
+  "halaman": "SBP 2, 8",
+  "expect": [
+   "Abripda",
+   "(bisa|dapat|boleh)"
+  ],
+  "forbid": [
+   "tidak memenuhi syarat",
+   "tidak (?:dapat|bisa|boleh) (?:mendaftar|mengikuti|ikut)",
+   "tidak menunjukkan"
+  ],
+  "sources": "SBP",
+  "pages": [
+   2
+  ]
+ },
+ {
   "id": "PERPOL-01",
   "kategori": "Contoh soal",
   "turns": [
