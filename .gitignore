@@ -78,3 +78,7 @@ Desktop.ini
 *~
 
 # Keep dependency manifests and lockfiles tracked for reproducible installation.
+
+# Catatan internal
+implementation_plan.md
+task.md
