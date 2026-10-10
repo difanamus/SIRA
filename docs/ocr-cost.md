@@ -1,5 +1,7 @@
 # Estimasi biaya OCR, 8 Oktober 2026
 
+> **Model aktif saat ini (10 Oktober 2026):** jawaban chat **GPT-6 Luna**; OCR AI **GPT-6 Luna** dengan fallback **GPT-5.6 Sol**; embedding **text-embedding-3-small**. Estimasi tarif di bawah dibuat 8 Oktober untuk GPT-4.1 mini (pembaca gambar saat itu); tarif aktual dihitung dari `worker/src/cost.ts`.
+
 Tarif standar GPT-4.1 mini: input US$0,40 / 1 juta token; output US$1,60 / 1 juta token. Gambar dihitung sebagai token input berdasarkan ukuran dan aturan patch, bukan ukuran MB PDF.
 
 Untuk melanjutkan 8 halaman SBP: 2 pembacaan terpisah per halaman, masing-masing menerima 2 potongan gambar. Dengan perkiraan 10.500 token input per request untuk ukuran crop sekarang dan 1.500–6.000 token output, biaya 16 request kira-kira:
@@ -20,4 +22,4 @@ Sumber resmi:
 
 ## Perubahan alur berikutnya pada hari yang sama
 
-Estimasi di atas untuk metode dua pembacaan seluruh halaman sebelumnya, bukan tarif pipeline baru. Kini OCR lokal → GPT-4.1 mini → GPT-5.6 Sol hanya pada crop yang masih meragukan. Jumlah request lebih bergantung pada kualitas tiap bagian; jangan memakai estimasi lama sebagai jaminan biaya. Mini memakai 60.000 unit reservasi/request, Sol 200.000. Kuota utama tetap 2 juta. Lihat [alur fallback](ocr-fallback.md).
+Estimasi di atas untuk metode dua pembacaan seluruh halaman sebelumnya, bukan tarif pipeline baru. Kini OCR lokal → GPT-6 Luna → GPT-5.6 Sol hanya pada crop yang masih meragukan. Jumlah request lebih bergantung pada kualitas tiap bagian; jangan memakai estimasi lama sebagai jaminan biaya. Mini memakai 60.000 unit reservasi/request, Sol 200.000. Kuota utama tetap 2 juta. Lihat [alur fallback](ocr-fallback.md).

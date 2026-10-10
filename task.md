@@ -4,11 +4,38 @@ Terakhir diperbarui: 10 Oktober 2026.
 
 Pedoman detail: [implementation_plan.md](implementation_plan.md).
 
+> **Model aktif saat ini:** jawaban chat GPT-6 Luna; OCR AI GPT-6 Luna dengan fallback GPT-5.6 Sol; embedding text-embedding-3-small. Entri bertanggal mencatat model pada saat itu.
+
 - [x] 10 Oktober 2026: pembaca gambar awal diganti dari GPT-4.1 mini menjadi GPT-6 Luna; fallback GPT-5.6 Sol, validasi tabel, review selektif, native PDF, serta OCR lokal dipertahankan. Model aktual disimpan pada hasil baru; checkpoint lama tetap dikenali sebagai GPT-4.1 mini dan tidak dibaca ulang otomatis. Uji nyata satu tabel SBP lulus struktur/sel gabungan dan tanggal, estimasi US$0,000584. Regresi backend, relay dan build UI diperiksa; rincian dan batas bukti di `docs/testing.md`.
 
 - [x] 10 Oktober 2026: model jawaban kembali diperbarui sesuai pilihan pengguna menjadi GPT-6 Luna. Mode reasoning `none` mempertahankan karakter chat cepat sebelumnya. Type check, 9 tes policy/biaya, 13 tes runtime, dry-run serta build frontend lulus; Cloudflare aktif dan satu request nyata mengonfirmasi model Luna. OCR, retrieval, embedding, prompt, data dan seluruh binding relay dipertahankan. Bukti dan batas pengujian di `docs/testing.md`.
 
 - [x] 10 Oktober 2026: model jawaban diganti dari GPT-4o mini ke GPT-4.1 mini dan diterapkan ke relay Cloudflare. Prompt, retrieval, embedding, serta alur OCR dipertahankan. Type check, 9 tes policy/biaya, 13 tes runtime, dry-run dan build UI lulus. Satu request nyata mengonfirmasi model `gpt-4.1-mini-2025-04-14` dan jawaban tanggal SBP 23–26 November 2026 saat sumber halaman 12 diberikan langsung. Ini belum membuktikan perbaikan retrieval. Detail di `docs/testing.md`.
+
+- [x] 10 Oktober 2026: knowledge base bawaan (pilihan B1). `seed/knowledge.json.gz` (±707 KiB) berisi teks halaman, 115 chunk dan embedding Perpol 1/2025 serta SBP T.A. 2027, tanpa PDF. Dimuat sekali pada instalasi kosong (`SIRA_SEED_KB`), tidak dimuat ulang setelah dihapus/diganti, instalasi lama tidak diubah. Fitur yang membutuhkan PDF memberi pesan jelas sampai admin memakai Ganti file. 4 tes baru; seluruh backend 122 lulus, 1 live dilewati; ruff lulus. Uji impor seed asli: 2 dokumen siap, 115 vektor identik dengan sumber (selisih maks 7e-9). Ekspor ulang: `scripts/export-seed.py`.
+- [x] 10 Oktober 2026: aturan penyimpulan kategori pada prompt jawaban (kasus "lulusan SMA" → Abripda MDDP 0 tahun) di `worker/src/policy.ts`. Type check, 9 policy/biaya, dry-run dan 13 runtime lulus. Dideploy ke Cloudflare versi `413e2861-7f94-4b35-9705-d12a50bb6a18` (binding identik dengan versi sebelumnya `9b659a5b`). Uji nyata 6 kasus lulus (8 jawaban, 9 embedding): SMA, S-2, daftar syarat SBP, penilaian kinerja Perpol, di luar KB, dan uang saku (tidak disimpulkan). Hasil: `tmp/category-live/results.json`; rincian di `docs/testing.md`.
+
+- [x] 10 Oktober 2026: dua perbaikan tampilan jawaban. (1) Penebalan `**…**` dari model kini ditampilkan sebagai teks tebal di chat (sebelumnya bintang dibuang), tanpa menyisipkan HTML. (2) Jawaban yang seluruhnya berupa "belum ditemukan dalam dokumen" tidak lagi menampilkan penanda [S#] maupun referensi; jawaban campuran (ada fakta bersumber) tetap menampilkan referensi. 2 tes baru; backend 124 lulus, 1 live dilewati; ruff dan build frontend lulus; `frontend/dist` diperbarui.
+
+- [x] 10 Oktober 2026: verifikasi teks 12 halaman SBP terhadap gambar PDF asli. Seluruh angka, tanggal, pangkat, nilai, rumus dan 23 baris jadwal sesuai. Temuan kosmetik: kata sambung hal. 7, "u.b." hal. 10, nomor lampiran hal. 11, typo asli hal. 5/8 dibetulkan AI. Hal. 12 dikoreksi admin melalui Review (label kolom KEGIATAN/JADWAL seperti hal. 11, judul lanjutan, blok tanda tangan tunggal) dan diindeks ulang; seed diekspor ulang (hanya hal. 12 berubah, 115 chunk). Pencarian kata "jadwal kirim berkas ke panitia pusat" kini menempatkan hal. 12 di peringkat pertama.
+
+- [x] 10 Oktober 2026: evaluasi nyata 26 pertanyaan acuan (`docs/evaluasi-acuan.md`, `scripts/eval-live.py`): **25/26 lulus**, 1 sebagian (CROSS-01, pertanyaan lintas dokumen dengan istilah berbeda). Perbaikan retrieval: bobot potongan bertanggal untuk pertanyaan waktu dan jaminan sumber per dokumen untuk pertanyaan yang menyebut dua dokumen; 3 tes baru, backend 127 lulus. Rincian: `docs/evaluasi-hasil.md`.
+
+- [x] 10 Oktober 2026: jawaban tidak lagi berkedip (hilang lalu muncul lagi). Pencarian ulang hanya dipicu kalimat yang menyatakan informasi tidak ada di dokumen, bukan frasa penjelasan seperti "tidak disebut khusus"; perapian penanda pada jawaban "belum ditemukan" kini mengganti teks di tempat (`replace_answer`). Penanda daftar/rentang seperti [S1, S3] dan [S1–S10] dikenali, dan penanda yang dipakai sebagai subjek kalimat tidak lagi merusak teks. Evaluasi ulang 26 kasus: tetap 25/26, penulisan ulang terlihat hanya 3 (semuanya kasus "tidak ditemukan"), jawaban SMA tanpa penulisan ulang. 4 tes baru; backend 131 lulus; build frontend diperbarui.
+
+- [x] 10 Oktober 2026: uji instalasi bersih (salinan file yang akan masuk Git, tanpa data/.env/PDF) di `tmp/uji-instal-bersih`: knowledge base bawaan termuat (2 dokumen, 115 chunk), koneksi AI terisi otomatis, OCR terpasang, login admin berhasil. Temuan: Python bawaan laptop 3.14 dan 3.12 tidak terdaftar (instalasi lama memakai Python 3.12 runtime Codex). `setup.ps1` kini mencari Python 3.12 64-bit otomatis (`python`, `py -3.12`, lokasi standar, `.venv` lama) dan berhenti dengan petunjuk pemasangan tanpa traceback; README menambah langkah pemasangan Python 3.12 dan menandai OCR opsional. Logika pencarian diuji dengan PowerShell 7 (5 skenario) dan dikonfirmasi di Windows PowerShell 5.1: pesan tanpa Python 3.12 tampil rapi, setup ulang memakai `.venv` lama sampai selesai.
+
+- [x] 10 Oktober 2026: draf tanpa sumber tidak lagi sempat tampil (kasus "cara masak nasi goreng": resep muncul sesaat lalu diganti). Teks jawaban ditahan sampai memuat penanda sumber valid, lalu di-stream seperti biasa; jawaban tanpa penanda (penolakan, belum ditemukan, klarifikasi) ditampilkan utuh setelah lolos pemeriksaan; penulisan ulang atas draf yang belum tampil hanya mengubah status. Total waktu jawaban tidak berubah. 2 tes baru, 3 tes disesuaikan; backend 133 lulus.
+
+- [x] 10 Oktober 2026: celah "pengetahuan umum + penafian" ditutup (kasus kopi susu: resep tampil karena jawaban tanpa sumber yang *mengandung* frasa "tidak tercantum" dianggap penolakan). Kini jawaban tanpa sumber hanya lolos bila *seluruh* kalimatnya penolakan/tidak ditemukan/klarifikasi; selain itu diulang sekali, lalu diganti balasan baku ramah. Semua kasus tidak ditemukan memakai balasan baku yang menyebut dokumen tersedia. Evaluasi ditambah 3 kasus di luar dokumen (kopi susu, SIM, Piala Dunia). 2 tes baru, 6 tes disesuaikan; backend 135 lulus.
+
+- [x] 10 Oktober 2026: penulisan ulang kueri oleh GPT-6 Luna sebelum pencarian (relay `/rewrite`, dideploy versi `de3ce295-2e63-48be-af15-18b930ea6434`, binding identik). Lanjutan halaman otomatis (8 → 9) dan petunjuk beberapa halaman pada dokumen yang dibahas. Evaluasi putaran 1 (32 kasus): 29 lulus, ketiga kasus baru dari percakapan nyata lulus; regresi PERPOL-04 (kueri hasil tulis ulang menarik formulir lampiran) dan waktu teks pertama naik ke median 4,1 detik. Perbaikan: penulisan ulang hanya untuk pesan berisiko (lanjutan, halaman, sangat pendek, kata di luar kosakata dokumen) dan pencarian memakai kueri baru + pertanyaan asli sekaligus; penanda "[S1]–[S10]" terpisah dikenali. Backend 141 lulus.
+
+- [x] 10 Oktober 2026: evaluasi putaran 2 (32 kasus): 30 lulus, median teks pertama kembali 2,7 detik (dari 4,1). Ditemukan sebab PERPOL-04 gagal: hampir setiap halaman SBP berakhir kata sambung, sehingga lanjutan halaman berantai mendorong Pasal 27 Perpol keluar dari 10 sumber dan model membaca contoh formulir (jawaban 45, seharusnya 60). Lanjutan halaman kini hanya untuk 2 sumber teratas; 1 tes baru, backend 142 lulus.
+
+- [x] 10 Oktober 2026: evaluasi subset (6 kasus): 5 lulus (SBP-02, SBP-09, FOLLOW-02, PAGE-01, PAGE-02). PERPOL-04 masih gagal karena Pasal 27 (Perpol hal. 14) tidak masuk 10 sumber: BM25 menempatkannya di peringkat 16 (potongan panjang, dan "menerima" tidak cocok dengan "penerima"), sedangkan contoh formulir hal. 61 peringkat 1. Perbaikan: bentuk kata terima/menerima/penerima/diterima disamakan pada pencarian leksikal; hal. 14 naik ke peringkat 2 (termasuk 3 teratas yang selalu dikirim ke model) dan peringkat 31 kasus lain tidak berubah. Dua tes yang tertinggal di salinan lokal dipulihkan, 1 tes baru; backend 143 lulus.
+
+- [x] 10 Oktober 2026: evaluasi putaran akhir (32 kasus): 31 lulus, hanya CROSS-01 sebagian (keterbatasan tercatat). PERPOL-04 menjawab 60 dari Perpol hal. 14. Median teks pertama 2,8 detik, jawaban lengkap median 3,0 detik, maksimum 7,6 detik; 40 jawaban AI/40 embedding. Semua jawaban dibaca dan dicocokkan dengan acuan. `docs/evaluasi-hasil.md` diperbarui.
 
 Aturan penggunaan:
 
@@ -54,7 +81,7 @@ Aturan penggunaan:
 - [x] Menegakkan anggaran uji mikro-USD di server dengan reservasi atomik, penyelesaian usage nyata, serta penahanan reservasi saat upstream gagal.
 - [x] Menonaktifkan batas kumulatif request/unit/biaya aplikasi atas permintaan pemilik; memverifikasi chat GPT nyata dengan referensi setelah deployment, sambil mempertahankan autentikasi dan proteksi spam per menit.
 - [x] Mengintegrasikan `text-embedding-3-small` untuk dokumen dan pertanyaan.
-- [x] Mengintegrasikan GPT-4o mini untuk jawaban; OCR kini menggunakan GPT-4.1 mini dan fallback GPT-5.6 Sol.
+- [x] Mengintegrasikan LLM untuk jawaban (awalnya GPT-4o mini, kini GPT-6 Luna); OCR AI kini GPT-6 Luna dengan fallback GPT-5.6 Sol.
 - [x] Meneruskan streaming OpenAI -> Worker -> FastAPI -> browser tanpa buffering seluruh jawaban.
 - [x] Menangani timeout, rate limit, retry terbatas, dan error tanpa membocorkan rahasia.
 - [x] Memeriksa kompatibilitas ukuran payload vision dengan batas Worker.
@@ -82,8 +109,8 @@ Aturan penggunaan:
 - [x] Menentukan sinyal bantuan AI tanpa menganggap confidence sebagai jaminan kebenaran.
 - [x] Mengintegrasikan bantuan vision selektif dengan transkripsi setia sumber dan penandaan bagian tidak terbaca.
 - [x] Menangani halaman kritis yang belum terbaca tanpa mengaktifkan versi tidak lengkap secara diam-diam.
-- [x] Menambahkan tombol admin **Baca dengan AI**, pemeriksaan GPT-4.1 mini setelah OCR lokal, mode persisten, dan cache sesuai metode; model chat tetap GPT-4o mini.
-- [x] Menerapkan OCR lokal → GPT-4.1 mini → GPT-5.6 Sol pada bagian yang masih meragukan; AI membaca gambar asli tanpa transkripsi OCR/model sebelumnya, dengan checkpoint dan penghentian antrean AI saat layanan gagal.
+- [x] Menambahkan tombol admin **Baca dengan AI**, pemeriksaan AI setelah OCR lokal (awalnya GPT-4.1 mini, kini GPT-6 Luna), mode persisten, dan cache sesuai metode.
+- [x] Menerapkan OCR lokal → GPT-6 Luna (awalnya GPT-4.1 mini) → GPT-5.6 Sol pada bagian yang masih meragukan; AI membaca gambar asli tanpa transkripsi OCR/model sebelumnya, dengan checkpoint dan penghentian antrean AI saat layanan gagal.
 - [x] Menjaga batas crop pada sela baris dan garis penuh tabel agar sel gabungan tidak terpisah; preflight lokal 12 halaman SBP berhasil.
 - [x] Menampilkan lokasi/crop bagian bermasalah dan mewajibkan konfirmasi hanya pada halaman yang belum lolos atau diedit admin.
 - [x] Menampilkan hanya halaman wajib review yang belum dikonfirmasi secara default, berpindah otomatis setelah konfirmasi, serta menyediakan opsi **Review seluruh halaman**.
@@ -109,7 +136,7 @@ Aturan penggunaan:
 - [x] Mengatur jawaban sopan/profesional dan membatasi fakta pada evidence dokumen.
 - [x] Menangani informasi tidak tersedia dengan pesan yang disepakati.
 - [x] Menangani perbedaan ketentuan dengan penjelasan dan sumber tanpa menebak keputusan.
-- [ ] Menguji daftar persyaratan agar jawaban tidak diam-diam tidak lengkap.
+- [x] Menguji daftar persyaratan agar jawaban tidak diam-diam tidak lengkap. (10 Oktober 2026, lihat `docs/evaluasi-hasil.md`)
 - [x] Membuat referensi teks dari metadata sumber yang valid, tanpa link/download PDF.
 - [x] Menampilkan streaming dan menandai respons yang terputus sebagai belum selesai.
 - [x] Mempertahankan riwayat dan konteks saat refresh/buka ulang/restart, serta menghapus sesi lama hanya melalui Percakapan baru sesuai keputusan terbaru pengguna.
@@ -140,9 +167,9 @@ Aturan penggunaan:
 
 ## 8. Evaluasi fungsional dan kecepatan
 
-- [ ] Membaca isi lengkap bahan uji dan menyusun pertanyaan/jawaban acuan beserta halaman sumber.
+- [x] Membaca isi lengkap bahan uji dan menyusun pertanyaan/jawaban acuan beserta halaman sumber. (10 Oktober 2026, lihat `docs/evaluasi-hasil.md`)
 - [x] Memisahkan fixture sintetis konflik/injection dari knowledge base demo resmi.
-- [ ] Menguji pertanyaan SIPK/penilaian kinerja dan SBP agar sumber tidak tertukar.
+- [x] Menguji pertanyaan SIPK/penilaian kinerja dan SBP agar sumber tidak tertukar. (10 Oktober 2026, lihat `docs/evaluasi-hasil.md`)
 - [x] Menguji pertanyaan lanjutan, ambigu, tidak tersedia, konflik, dan kelengkapan daftar.
 - [x] Memverifikasi referensi halaman, lifecycle dokumen, persistensi, dan reset sesi.
 - [x] Mengukur embedding, retrieval, waktu teks pertama, serta waktu jawaban selesai.

@@ -1,5 +1,7 @@
 # Audit kesesuaian SIRA dengan tugas tahap 2
 
+> **Model aktif saat ini (10 Oktober 2026):** jawaban chat **GPT-6 Luna**; OCR AI **GPT-6 Luna** dengan fallback **GPT-5.6 Sol**; embedding **text-embedding-3-small**. Audit ini ditulis 9 Oktober 2026, sebelum pergantian model.
+
 Tanggal: 9 Oktober 2026. Pemeriksaan ini tidak mengubah kode, akun, isi knowledge base, atau konfigurasi relay. Tidak ada request OpenAI maupun deployment Cloudflare.
 
 Catatan pembaruan setelah audit: instalasi otomatis penguji telah diterapkan, dan pada 9 Oktober 2026 pemilik memperpanjang demo sampai **30 Oktober 2026 pukul 23.59 WIB**. Temuan tentang distribusi token dan expiry 16 Oktober di bawah merupakan kondisi saat audit awal. Status terbaru ada di [panduan instalasi otomatis](automatic-installation.md).
@@ -22,7 +24,7 @@ Kesimpulan: komponen dan fitur utama RAG tersedia serta sesuai ruang lingkup pro
 | Chunking | Tersedia | `chunk_page` pada `backend/app/ingestion.py`: target 650 token, overlap 100 pada pemotongan paragraf panjang; baris tabel terstruktur dipertahankan sebagai unit utuh. Target bukan batas keras untuk baris tabel panjang. |
 | Embedding | Tersedia | `text-embedding-3-small`, 1536 dimensi, batch dokumen dan embedding pertanyaan melalui relay. |
 | Vector database dan pencarian kemiripan | Tersedia | Chroma PersistentClient, cosine distance, filter versi aktif; kandidat semantik diberi tie-break kata. |
-| Retrieval sebagai konteks LLM | Tersedia | Maksimum 10 sumber/24.000 karakter dipilih backend, dikirim sebagai data ke GPT-4o mini. |
+| Retrieval sebagai konteks LLM | Tersedia | Maksimum 10 sumber/24.000 karakter dipilih backend, dikirim sebagai data ke LLM (saat audit GPT-4o mini; kini GPT-6 Luna). |
 | Sumber Perpol dan SBP tidak tertukar | Perlu evaluasi akhir | Metadata asal halaman/versi tersedia. Pemilihan konteks tetap bergantung pada retrieval dan LLM; matriks uji kedua dokumen resmi belum lengkap. |
 | Tidak mengarang ketika informasi tidak tersedia | Proteksi tersedia, perlu evaluasi akhir | Jawaban statis untuk KB kosong/tanpa kandidat, instruksi abstain dan validasi referensi. Ini tidak menjamin seluruh klaim model benar. |
 | Keterkaitan jawaban dengan sumber | Tersedia, perlu evaluasi isi | Referensi nama dokumen/halaman berasal dari metadata dan ID valid. Validasi ID tidak memeriksa dukungan semantik setiap kalimat. Ketentuan tidak mewajibkan tautan unduh atau referensi clickable. |
@@ -88,4 +90,4 @@ Tidak perlu menambah model selection, klasifikasi dokumen, WhatsApp, banyak akun
 
 ## Tindak lanjut setelah audit, 9 Oktober 2026
 
-Temuan akses relay penguji pada audit awal telah ditangani melalui instalasi otomatis setelah pengguna mengizinkan demo publik. Setup/start mengambil konfigurasi Cloudflare tanpa input token/key. Deployment aktif dan uji integrasi nyata dari `.env`/KB kosong berhasil untuk login, ingestion PDF teks sintetis, embedding query, dan jawaban GPT-4o mini bersumber. Detail: [koneksi otomatis](automatic-installation.md). Temuan instalasi Windows bersih, evaluasi akurasi bahan resmi, video, remote/link Git, dan penyerahan tetap belum otomatis selesai oleh perubahan ini.
+Temuan akses relay penguji pada audit awal telah ditangani melalui instalasi otomatis setelah pengguna mengizinkan demo publik. Setup/start mengambil konfigurasi Cloudflare tanpa input token/key. Deployment aktif dan uji integrasi nyata dari `.env`/KB kosong berhasil untuk login, ingestion PDF teks sintetis, embedding query, dan jawaban GPT-4o mini bersumber (model saat itu; kini GPT-6 Luna). Detail: [koneksi otomatis](automatic-installation.md). Temuan instalasi Windows bersih, evaluasi akurasi bahan resmi, video, remote/link Git, dan penyerahan tetap belum otomatis selesai oleh perubahan ini.

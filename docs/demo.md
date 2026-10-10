@@ -18,7 +18,7 @@ Gunakan dokumen yang diizinkan untuk bahan uji. Jangan merekam terminal setup ke
 
 “Admin memasukkan PDF, lalu sistem mengekstrak teks per halaman. Halaman scan diproses Tesseract bahasa Indonesia dan Inggris. Jika confidence atau jenis informasi memerlukan pemeriksaan tambahan, sistem meminta transkripsi vision. Bagian yang belum terbaca atau masih berbeda setelah pemeriksaan ulang angka/negasi/periode menyebabkan versi gagal, sehingga versi lama yang siap tetap aktif.”
 
-“Teks dibagi menjadi chunk dengan asal halaman, lalu embedding disimpan dalam Chroma lokal. Saat pengguna bertanya, sistem mencari evidence dari versi aktif dan memasukkannya ke GPT-4o mini. Instruksi sistem meminta jawaban profesional berdasarkan sumber; ID referensi divalidasi sebelum jawaban ditandai selesai.”
+“Teks dibagi menjadi chunk dengan asal halaman, lalu embedding disimpan dalam Chroma lokal. Saat pengguna bertanya, sistem mencari evidence dari versi aktif dan memasukkannya ke GPT-6 Luna. Instruksi sistem meminta jawaban profesional berdasarkan sumber; ID referensi divalidasi sebelum jawaban ditandai selesai.”
 
 “Pertanyaan sebelumnya digunakan untuk memahami maksud follow-up, sedangkan fakta tetap diambil melalui retrieval baru. Riwayat dan konteks disimpan di SQLite, dan browser menyimpan penanda sesi. Refresh atau restart tidak menghapus percakapan; Percakapan baru menghapus sesi sebelumnya. API key utama berada di Cloudflare Secrets; akses aplikasi menggunakan token relay yang dibatasi operasi, kecepatan, dan masa berlaku. Batas kumulatif penggunaan aplikasi telah dinonaktifkan atas permintaan pemilik.”
 

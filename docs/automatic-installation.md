@@ -1,5 +1,7 @@
 # Koneksi otomatis instalasi penguji
 
+> **Model aktif saat ini (10 Oktober 2026):** jawaban chat **GPT-6 Luna**; OCR AI **GPT-6 Luna** dengan fallback **GPT-5.6 Sol**; embedding **text-embedding-3-small**. Hasil verifikasi 9 Oktober di bawah memakai model jawaban saat itu (GPT-4o mini).
+
 Tambahan 9 Oktober 2026. Pengguna memberikan persetujuan eksplisit untuk demo publik selama masa pengujian. Pemrosesan OCR, retrieval, prompt/model jawaban, akun admin, dan data knowledge base tidak diubah.
 
 ## Alur penguji

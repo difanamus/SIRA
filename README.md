@@ -1,188 +1,346 @@
 # SIRA — Sistem Informasi dan Referensi Aparatur
 
-Asisten Informasi SDM Polri berbasis dokumen. Nama SIRA merupakan singkatan dari **Sistem Informasi dan Referensi Aparatur**.
+**Asisten Informasi SDM Polri berbasis dokumen.** SIRA adalah prototype aplikasi *Question and Answer* berbasis **Retrieval-Augmented Generation (RAG)**. Pengguna bertanya dengan bahasa sehari-hari, lalu SIRA mencari bagian dokumen yang paling relevan dan menjawab hanya berdasarkan isi dokumen tersebut, disertai referensi **nama dokumen dan halaman**.
 
-Prototype RAG untuk menjawab pertanyaan berdasarkan PDF yang dimasukkan admin. Instalasi baru dimulai dengan knowledge base kosong. PDF, teks hasil ekstraksi, metadata, dan indeks disimpan persisten pada komputer yang menjalankan aplikasi.
+Prototype ini dibuat untuk Seleksi Kemampuan Pemrograman Tahap 2 (RAG), 8–14 Oktober 2026. Bahan uji knowledge base:
 
-Halaman chat berada di `/`, halaman pengelolaan dokumen di `/admin`. Referensi jawaban berupa nama dokumen dan halaman, tanpa tautan atau unduhan PDF. Riwayat dan konteks percakapan tetap tersedia setelah refresh, tutup/buka browser yang sama, dan restart aplikasi. Hanya **Percakapan baru** yang menghapus sesi lama dan memulai percakapan kosong.
+- **Peraturan Kepolisian Nomor 1 Tahun 2025** — dokumen peraturan (pasal, ayat, tabel, rumus) tentang penilaian kinerja/SIPK. PDF teks.
+- **Pengumuman Seleksi SBP dari Tamtama ke Bintara T.A. 2027** — dokumen pengumuman (persyaratan, tahapan, jadwal). PDF hasil scan, membutuhkan OCR.
 
-SIRA menjawab sapaan dan pertanyaan perkenalan seperti “kamu siapa?”, “SIRA itu apa?”, dan “oy SIRA” secara sopan tanpa request AI, termasuk saat knowledge base masih kosong. Perkenalan tidak mengganti konteks pertanyaan dokumen. Jalur ini hanya menerima pesan lengkap yang cocok dengan pola perkenalan; pesan yang juga memuat pertanyaan dokumen atau instruksi lain tetap mengikuti alur RAG dan pemeriksaan yang sudah ada.
+Instalasi baru **langsung berisi kedua dokumen tersebut** sebagai knowledge base bawaan, sehingga SIRA bisa langsung ditanya tanpa upload, OCR, atau biaya AI. Dokumen bawaan bukan data mati: admin tetap dapat mengubah judul, mengganti file, menghapus, dan menambah dokumen baru melalui halaman `/admin`. Lihat [Knowledge base bawaan](#knowledge-base-bawaan).
 
-PDF teks dengan tabel dibaca melalui posisi karakter dan batas sel asli, termasuk sel gabungan. Tabel tidak otomatis memerlukan AI atau review manual. Jika struktur native belum lengkap, bagian bermasalah tetap diperiksa lewat gambar asli. PDF scan tetap mengikuti OCR lokal → GPT-6 Luna → GPT-5.6 Sol → review selektif jika belum lolos. **Proses ulang** dapat melanjutkan dokumen gagal yang sempat dibuka untuk review; koreksi manusia tetap disimpan. Detail: [ekstraksi tabel native](docs/native-pdf-tables.md).
+## Daftar isi
 
-## Kebutuhan
+1. [Fitur utama](#fitur-utama)
+2. [Tech stack](#tech-stack)
+3. [Arsitektur dan workflow RAG](#arsitektur-dan-workflow-rag)
+4. [Instalasi](#instalasi)
+5. [Penggunaan](#penggunaan)
+6. [Dokumentasi API](#dokumentasi-api)
+7. [Struktur proyek dan database](#struktur-proyek-dan-database)
+8. [Pengujian](#pengujian)
+9. [Keterbatasan dan pengembangan lanjutan](#keterbatasan-dan-pengembangan-lanjutan)
+10. [Troubleshooting](#troubleshooting)
 
-- Windows 64-bit, Python **3.12**, Node.js **24 LTS**, dan PowerShell.
-- Internet untuk instalasi dan pemanggilan AI. Ekstraksi PDF, OCR lokal, dan pencarian vektor berjalan di PC.
-- Relay Cloudflare milik peserta. Selama akses demo ujian aktif, instalasi terhubung otomatis; penguji tidak perlu akun Cloudflare, Wrangler, API key OpenAI, atau memasukkan token secara manual.
-- Tesseract dengan bahasa `ind` dan `eng` untuk PDF scan.
+## Fitur utama
 
-Dependensi Python dan npm dikunci. Implementasi diuji pada lingkungan Windows pengembang; pengujian instalasi pada PC Windows bersih masih perlu dilakukan.
+**Halaman chat (`/`)**
 
-## Instalasi dan menjalankan
+- Satu halaman berisi riwayat pesan, kotak pertanyaan, tombol **Kirim**, dan tombol **Percakapan baru**.
+- Jawaban tampil bertahap (streaming) dengan referensi nama dokumen dan halaman, tanpa tautan atau unduhan PDF.
+- Jika informasi tidak ada di dokumen, SIRA menyatakan informasi belum ditemukan dan tidak mengarang.
+- Pertanyaan lanjutan ("kalau untuk lulusan SMA?") memahami topik sebelumnya. Jika konteks belum cukup, SIRA meminta klarifikasi.
+- Riwayat percakapan tetap ada setelah refresh, browser ditutup, atau aplikasi di-restart. Hanya **Percakapan baru** yang menghapusnya.
+- Sapaan dan pertanyaan perkenalan ("kamu siapa?", "SIRA itu apa?") dijawab langsung tanpa memanggil AI.
 
-Ekstrak/unduh source ke folder proyek, lalu buka PowerShell di folder yang berisi `setup.ps1`. Periksa versi:
+**Halaman admin (`/admin`)**
 
-```powershell
-python --version
-node --version
+- Login satu akun admin (password di-hash Argon2).
+- Upload PDF teks maupun scan (default maks. 100 MiB dan 300 halaman), ubah judul, ganti file (versi baru), dan hapus dokumen.
+- Progres pemrosesan di background. Versi lama tetap aktif sampai versi baru berhasil.
+- **Review dan koreksi**: menampilkan gambar asli halaman berdampingan dengan editor teks, untuk memperbaiki hasil OCR yang meragukan sebelum diindeks.
+- **Uji koneksi AI** untuk memastikan layanan AI dapat dihubungi.
+
+## Tech stack
+
+| Bagian | Teknologi | Peran |
+| --- | --- | --- |
+| Frontend | React 19, TypeScript, Vite 7, CSS | UI chat dan admin |
+| Backend | Python 3.12, FastAPI, Uvicorn | REST API, autentikasi, ingestion, retrieval, streaming, menyajikan hasil build frontend |
+| Database aplikasi | SQLite | Akun admin, dokumen dan versinya, teks halaman, chunk, status ingestion, riwayat chat |
+| Vector database | ChromaDB (PersistentClient, cosine) | Menyimpan embedding dan pencarian kemiripan secara lokal |
+| Ekstraksi PDF | pdfplumber | Teks per halaman, termasuk tabel berdasarkan posisi karakter dan garis sel |
+| Render PDF | pypdfium2, Pillow | Mengubah halaman scan menjadi gambar |
+| OCR lokal | Tesseract (`ind` + `eng`), pytesseract | Membaca halaman scan di PC |
+| OCR AI | GPT-6 Luna, fallback GPT-5.6 Sol | Membaca gambar halaman scan yang belum lolos pemeriksaan lokal |
+| Tokenizer | tiktoken (`cl100k_base`) | Mengukur ukuran chunk |
+| Embedding | OpenAI `text-embedding-3-small` (1536 dimensi) | Embedding chunk dan pertanyaan |
+| LLM jawaban | OpenAI GPT-6 Luna (temperature 0.1) | Menyusun jawaban dari sumber yang ditemukan |
+| Relay AI | Cloudflare Workers (TypeScript), Durable Object, Secrets | Menyimpan API key OpenAI di server, membatasi model, operasi, dan kecepatan |
+| Pengujian | pytest, ruff, `node --test`, Miniflare | Tes backend dan relay dengan AI tiruan |
+
+Pipeline RAG ditulis langsung tanpa framework orkestrasi (LangChain dan sejenisnya) agar setiap langkah mudah diperiksa.
+
+## Arsitektur dan workflow RAG
+
+```text
+Browser (chat / admin)
+        │
+        ▼
+FastAPI lokal (127.0.0.1) ──► Cloudflare Worker relay ──► OpenAI
+        │                      (API key di Secrets)        (embedding, GPT-6 Luna, GPT-5.6 Sol)
+        ▼
+SQLite + file PDF + ChromaDB  (semua tersimpan lokal di folder data/)
 ```
 
-Jika `python` menunjuk **Python 3.12.x** dan Node menunjukkan **v24.x**, jalankan:
+PDF, teks hasil ekstraksi, dan vector database tersimpan di PC. Yang dikirim ke AI hanya teks chunk (saat embedding), potongan sumber yang relevan (saat menjawab), dan gambar halaman scan yang perlu dibaca AI.
 
-```powershell
-.\setup.ps1
-.\scripts\setup-ocr.ps1
-.\start.ps1
+### 1. Ingestion dan parsing dokumen
+
+```text
+Upload PDF → validasi → ekstraksi per halaman → (scan) OCR lokal → GPT-6 Luna → GPT-5.6 Sol → review manual bila perlu
+          → chunking → embedding → simpan ke Chroma → aktifkan versi
 ```
 
-`setup.ps1` membuat `.venv`, memasang dependensi, membangun frontend, menyiapkan tokenizer, dan meminta Anda membuat akun admin melalui terminal. Setup juga mengisi koneksi Cloudflare otomatis selama masa akses demo aktif.
+- **Validasi**: hanya PDF; file rusak, terenkripsi, atau melebihi batas ukuran/halaman ditolak.
+- **PDF teks** dibaca langsung. Tabel disusun dari posisi karakter dan batas sel asli, termasuk sel gabungan, lalu diubah menjadi baris-baris yang utuh. Detail: [ekstraksi tabel native](docs/native-pdf-tables.md).
+- **PDF scan** dibaca Tesseract lokal terlebih dahulu. Area yang hasilnya meragukan (angka, tanggal, pangkat, negasi, tabel) dibaca ulang oleh GPT-6 Luna langsung dari gambar asli; bagian yang masih ragu dibaca GPT-5.6 Sol. Jika tetap belum lolos, admin mengonfirmasi lewat **Review dan koreksi**. Detail: [alur OCR](docs/ocr-fallback.md).
 
-### Jika komputer memiliki beberapa versi Python
+### 2. Strategi chunking
 
-`-PythonPath` adalah **lokasi executable Python 3.12 pada komputer yang sedang memasang SIRA**. Path ini bukan lokasi Bypass dan tidak harus sama dengan komputer peserta. Jika launcher `py` dan Python 3.12 sudah terpasang, tampilkan lokasinya dengan:
+- Chunk dibuat **per halaman**, sehingga setiap chunk selalu memiliki nomor halaman sumber yang jelas.
+- Teks dipecah di batas paragraf, lalu digabung sampai sekitar **650 token**. Paragraf yang lebih panjang dipotong dengan **overlap 100 token**.
+- **Baris tabel tidak pernah dipisah**, agar pasangan kegiatan–tanggal atau syarat–nilai tetap utuh dalam satu chunk.
+- Judul bagian terdekat (mis. "Pasal 31", "BAB II") disimpan sebagai *heading* untuk membantu pencarian.
+
+### 3. Embedding dan vector database
+
+- Setiap chunk diubah menjadi vektor dengan `text-embedding-3-small` (1536 dimensi), dikirim dalam batch.
+- Vektor disimpan di **ChromaDB** lokal dengan jarak cosine, bersama metadata `version_id` dan halaman. Pencarian hanya dilakukan pada versi dokumen yang sedang aktif.
+
+### 4. Retrieval (hybrid search)
+
+1. **Penulisan ulang kueri oleh GPT-6 Luna** (hanya bila perlu: pertanyaan lanjutan, menyebut halaman, sangat pendek, atau memuat kata yang tidak ada di dokumen; pertanyaan yang sudah jelas langsung dicari agar tetap cepat): pesan pengguna (bahasa santai, salah ketik seperti "sarat", singkatan, atau pertanyaan lanjutan seperti "lah di halaman 9 ga ada?") lebih dulu diubah menjadi kueri pencarian baku yang berdiri sendiri, beserta dokumen dan nomor halaman yang dimaksud. Kueri ini hanya dipakai untuk pencarian; jawaban tetap disusun dari pertanyaan asli pengguna. Pencarian memakai kueri baru **dan** pertanyaan asli sekaligus, sehingga penulisan ulang hanya menambah bukti, tidak menghilangkannya. Jika langkah ini gagal, pencarian memakai pertanyaan asli.
+2. Kueri diubah menjadi embedding.
+3. **Pencarian vektor**: 36 kandidat terdekat dari Chroma; kandidat dengan jarak cosine > 0,85 dibuang.
+4. **Pencarian kata (BM25)** pada seluruh chunk aktif, dengan normalisasi variasi kata seperti *lulus/lolos/kelulusan* dan *syarat/persyaratan*.
+5. Hasil keduanya digabung dengan *reciprocal rank fusion*. Tiga hasil teratas pencarian kata selalu disertakan agar bukti yang tepat secara kata tidak kalah dari kemiripan makna.
+6. **Lanjutan halaman**: jika potongan teratas berakhir dengan kata sambung halaman (misalnya "1) Ijazah ....."), potongan pertama halaman berikutnya ikut dikirim agar daftar atau tabel yang terbelah tidak terpotong. Halaman yang disebut pengguna ("halaman 8 dan 9") hanya diprioritaskan pada dokumen yang sedang dibahas.
+7. Maksimal **10 sumber / 24.000 karakter** dikirim ke LLM sebagai sumber bernomor `[S1]`, `[S2]`, dst.
+
+### 5. Generasi jawaban (LLM)
+
+GPT-6 Luna menerima pertanyaan, riwayat singkat, dan sumber bernomor dalam format JSON, lalu menjawab secara streaming. Prompt sistem lengkap ada di [`worker/src/policy.ts`](worker/src/policy.ts) (`ANSWER_SYSTEM`).
+
+### Cara meminimalkan halusinasi
+
+- **Hanya dari sumber**: prompt mewajibkan setiap fakta berasal dari sumber yang diberikan; riwayat percakapan bukan sumber fakta.
+- **Balasan baku yang ramah untuk pertanyaan di luar dokumen**: jika informasi tidak ada di knowledge base, SIRA menampilkan kalimat tetap (bukan buatan model) yang menjelaskan bahwa SIRA hanya menjawab berdasarkan dokumen dan menyebut dokumen yang tersedia. Jawaban dari pengetahuan umum tidak lolos meskipun disertai catatan "tidak ada di dokumen".
+- **Jawaban statis tanpa AI** ketika knowledge base kosong atau tidak ada kandidat relevan.
+- **Teks ditahan sampai bersumber**: jawaban baru tampil di layar setelah memuat penanda sumber yang valid. Draf tanpa sumber (misalnya jawaban dari pengetahuan umum model) diperiksa dulu dan tidak pernah sempat terlihat; yang tampil hanya teks bersumber atau pernyataan bahwa informasi tidak ditemukan.
+- **Wajib sitasi**: setiap pernyataan faktual harus diberi penanda `[S#]`. Backend memvalidasi bahwa ID yang dipakai benar-benar ada. Jawaban faktual tanpa sitasi diulang satu kali; jika tetap tanpa sitasi, jawaban ditandai gagal.
+- **Pemeriksaan ulang terbatas**: jika model menyatakan informasi tidak ditemukan, backend melakukan satu pencarian tambahan dan memeriksa ulang bila ada sumber baru.
+- **Aturan tabel dan daftar**: nilai harus diambil dari baris tabel yang sama; daftar persyaratan tidak boleh diklaim lengkap jika konteks hanya sebagian.
+- **Pemisahan sumber**: setiap chunk membawa judul dokumen dan halaman, sehingga sumber Perpol dan SBP tidak tercampur tanpa terlihat.
+- **Temperature rendah (0.1)** dan **proteksi prompt injection**: isi dokumen dan pertanyaan diperlakukan sebagai data, bukan instruksi; model tidak memiliki tool atau akses admin.
+
+### Cara memberikan sumber jawaban
+
+Model hanya menulis penanda `[S1]`, `[S2]`. Backend menerjemahkan penanda tersebut menjadi **judul dokumen dan nomor halaman** dari metadata database, sehingga model tidak dapat mengarang judul atau halaman. Referensi ditampilkan sebagai teks biasa di bawah jawaban.
+
+## Instalasi
+
+### Kebutuhan
+
+- Windows 64-bit dengan PowerShell
+- **Python 3.12 (64-bit)** — versi ini wajib karena seluruh dependensi dikunci dan diuji di 3.12. Python versi lain (3.13, 3.14, dst.) boleh tetap terpasang berdampingan; setup otomatis memilih 3.12.
+- **Node.js 24 LTS** — untuk membangun tampilan web.
+- Koneksi internet (instalasi dan pemanggilan AI). Ekstraksi PDF, OCR lokal, dan pencarian vektor berjalan di PC.
+- Opsional: Tesseract OCR (`ind` + `eng`), hanya untuk meng-upload PDF hasil scan. Dipasang oleh `scripts/setup-ocr.ps1`.
+
+Penguji **tidak** memerlukan akun Cloudflare, API key OpenAI, atau token manual selama masa akses demo aktif.
+
+### Langkah instalasi
+
+1. **Pastikan Python 3.12 tersedia.** Jalankan `py -0p` di PowerShell. Jika tidak ada baris `3.12`, unduh *Windows installer (64-bit)* Python 3.12 (misalnya 3.12.10) dari <https://www.python.org/downloads/windows/>, pasang dengan pengaturan bawaan, lalu buka ulang PowerShell. Python lain yang sudah ada tidak perlu dihapus.
+2. **Pastikan Node.js 24 tersedia:** `node --version` harus `v24.x` (unduh di <https://nodejs.org/>).
+3. Ekstrak/clone source, lalu buka PowerShell di folder yang berisi `setup.ps1` dan jalankan:
+
+   ```powershell
+   .\setup.ps1
+   .\start.ps1
+   ```
+
+   `setup.ps1` mencari Python 3.12 secara otomatis (`python`, lalu `py -3.12`, lalu lokasi instalasi standar). Jika tidak ditemukan, setup berhenti dengan petunjuk pemasangan.
+
+4. **Opsional — OCR untuk PDF hasil scan.** Lewati langkah ini jika hanya ingin mencoba tanya-jawab dengan dokumen bawaan atau meng-upload PDF teks biasa:
+
+   ```powershell
+   .\scripts\setup-ocr.ps1
+   ```
+
+5. Buka aplikasi:
+   - Chat: <http://127.0.0.1:8000>
+   - Admin: <http://127.0.0.1:8000/admin>
+   - Swagger: <http://127.0.0.1:8000/docs>
+
+`setup.ps1` membuat virtual environment `.venv`, memasang dependensi (versi terkunci), membangun frontend, menyiapkan tokenizer, meminta pembuatan akun admin, dan mengisi koneksi AI otomatis.
+
+### Knowledge base bawaan
+
+Saat aplikasi pertama kali dijalankan pada folder `data/` yang masih kosong, SIRA memuat paket `seed/knowledge.json.gz` (±0,7 MB): teks per halaman yang sudah diverifikasi, potongan teks (chunk), dan embedding Perpol 1/2025 (71 halaman) serta Pengumuman SBP T.A. 2027 (12 halaman). Tidak ada OCR, embedding ulang, atau request AI saat memuatnya.
+
+- **File PDF tidak disertakan** di repository. Karena itu, untuk dua dokumen bawaan, fitur yang membutuhkan PDF asli (**Review dan koreksi** dengan gambar halaman dan **Baca ulang dengan AI**) baru aktif setelah admin memakai **Ganti file** untuk mengunggah PDF-nya. Ubah judul, hapus, dan tanya-jawab berjalan normal.
+- Paket hanya dimuat **sekali**. Jika admin menghapus atau mengganti dokumen bawaan, dokumen tersebut tidak muncul kembali setelah restart. Instalasi yang sudah memiliki dokumen tidak diubah.
+- Untuk memulai dengan knowledge base kosong, isi `SIRA_SEED_KB=false` di `.env` sebelum menjalankan aplikasi pertama kali.
+- Memperbarui paket dari knowledge base yang sedang aktif (hentikan backend dahulu): `.\.venv\Scripts\python.exe scripts\export-seed.py`.
+
+### Membuat akun admin
+
+Penguji membuat username dan password sendiri saat `setup.ps1` berjalan. **Tidak ada password bawaan.**
+
+1. **Nama admin [admin]:** isi nama pengguna, atau tekan Enter untuk `admin`.
+2. **Password (minimal 12 karakter):** karakter tidak terlihat saat diketik; ini normal.
+3. **Ulangi password.**
+
+Akun hanya berlaku pada instalasi di komputer tersebut dan disimpan sebagai hash Argon2 di folder `data/` (tidak masuk Git). Menjalankan setup ulang tidak mengganti password. Untuk reset, hentikan aplikasi lalu jalankan:
 
 ```powershell
-py -3.12 -c "import sys; print(sys.executable)"
+.\.venv\Scripts\python.exe -m backend.setup_admin --reset
 ```
 
-Salin lokasi yang ditampilkan, lalu gunakan untuk setup. Contoh berikut adalah placeholder; **ganti dengan lokasi yang benar pada laptop Anda**:
+### Koneksi AI
+
+`setup.ps1` (dan `start.ps1` bila belum terisi) mengambil konfigurasi demo dari endpoint Cloudflare di `config/relay.json`, lalu menyimpan URL dan token demo di `.env` lokal. Konfigurasi milik pengguna yang sudah lengkap tidak ditimpa. Setelah aplikasi berjalan, login admin lalu klik **Uji koneksi AI** (satu request embedding kecil).
+
+- Akses demo berlaku sampai **30 Oktober 2026 pukul 23.59 WIB**. Setelah itu pemanggilan AI berhenti, tetapi dokumen dan data lokal tetap tersimpan.
+- Pemakaian AI selama masa demo ditagihkan ke akun pemilik. **API key OpenAI tidak pernah dikirim ke komputer penguji**; token demo dibatasi model, operasi, kecepatan, dan masa berlaku oleh relay. Jangan membagikan `.env`.
+- Panduan detail: [instalasi otomatis](docs/automatic-installation.md) · [relay milik sendiri / konfigurasi manual](docs/relay-setup.md).
+
+### Jika Python 3.12 berada di lokasi lain
+
+Setup biasanya menemukan Python 3.12 sendiri. Jika Python 3.12 dipasang di lokasi yang tidak standar, tunjuk langsung executable-nya:
 
 ```powershell
-$python312 = 'C:\lokasi\Python312\python.exe'
-& $python312 --version
-.\setup.ps1 -PythonPath $python312
+.\setup.ps1 -PythonPath 'C:\lokasi\Python312\python.exe'   # ganti dengan lokasi Python 3.12 Anda
 ```
 
-Pastikan pemeriksaan versi menghasilkan `Python 3.12.x`. Jika launcher tidak menemukan Python 3.12, pasang Python 3.12 terlebih dahulu atau gunakan lokasi instalasi 3.12 yang memang tersedia. Setelah setup selesai, lanjutkan skrip OCR dan `start.ps1` seperti di atas. Path khusus runtime Codex pada komputer peserta tidak diperlukan pada laptop penguji.
+### Jika PowerShell memblokir skrip
 
-### Hanya jika PowerShell memblokir skrip
-
-**Bypass bukan langkah instalasi wajib.** Jalankan skrip biasa terlebih dahulu. Jika muncul pesan seperti `running scripts is disabled` atau skrip diblokir oleh execution policy, dan kebijakan komputer Anda mengizinkannya, jalankan:
+Hanya jika muncul pesan seperti `running scripts is disabled`, jalankan perintah berikut lalu ulangi skrip pada jendela yang sama:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-Setujui konfirmasi, kemudian jalankan kembali skrip setup/OCR/start pada jendela PowerShell yang sama. `Process` membuat perubahan berlaku pada sesi tersebut dan proses turunannya, tanpa mengubah kebijakan permanen; perubahan berakhir ketika sesi/proses itu ditutup. `-Force` hanya menghilangkan konfirmasi dan tidak diperlukan. Kebijakan organisasi melalui Group Policy tetap memiliki prioritas. Lihat [dokumentasi execution policy Microsoft](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies/).
+`-Scope Process` hanya berlaku untuk jendela PowerShell tersebut dan tidak mengubah kebijakan permanen. Lihat [dokumentasi Microsoft](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies/).
 
-Untuk mencoba instalasi baru sambil aplikasi lama tetap berjalan, gunakan folder source terpisah dan jalankan `.\start.ps1 -Port 8001`. Buka `http://127.0.0.1:8001/admin`; folder data dan akun instalasi baru terpisah, serta penguji tetap membuat akun admin sendiri.
+### Catatan menjalankan
 
-### Membuat akun admin pada instalasi pertama
-
-**Penguji membuat username dan password sendiri saat menjalankan `setup.ps1`. Tidak ada password admin bawaan yang perlu diperoleh dari peserta atau README.** Setelah pemasangan dependensi selesai, terminal akan meminta:
-
-1. **Nama admin [admin]:** masukkan nama pengguna pilihan Anda, atau tekan Enter untuk menggunakan `admin`.
-2. **Password (minimal 12 karakter):** masukkan password pilihan Anda. Karakter password tidak terlihat saat diketik di terminal; ini normal.
-3. **Ulangi password:** ketik kembali password yang sama untuk konfirmasi.
-
-Setelah akun dibuat, setup menghubungkan AI ke Cloudflare secara otomatis. Lanjutkan pemasangan OCR, lalu jalankan `.\start.ps1`. Buka <http://127.0.0.1:8000/admin> dan login menggunakan username serta password yang baru Anda buat. Simpan password secara pribadi; jangan memasukkannya ke README atau GitHub.
-
-Akun ini hanya berlaku pada instalasi SIRA di komputer Anda. Orang lain yang mengunduh kode dan membuat akun pada instalasi mereka tidak otomatis mendapat akses ke instalasi Anda. Password disimpan sebagai hash Argon2 dalam database lokal di folder `data/`, yang tidak dilacak Git.
-
-Jika akun sudah ada, menjalankan setup lagi tidak mengganti password. Gunakan akun sebelumnya; jika lupa password, ikuti perintah reset pada bagian **Struktur dan penyimpanan**. Pembuatan akun dan reset dilakukan melalui terminal pada komputer yang menjalankan SIRA, bukan melalui pendaftaran publik di halaman login.
-
-### OCR dan konfigurasi AI
-
-OCR dipasang lokal dalam `tools/tesseract`, dengan checksum installer dan model bahasa yang diverifikasi. Skrip tidak menghapus instalasi yang sudah ada. Alternatif: isi `SIRA_TESSERACT_CMD` di `.env` dengan path Tesseract milik Anda, pastikan model `ind` dan `eng` tersedia.
-
-**Penguji tidak perlu mengisi konfigurasi AI secara manual.** `setup.ps1` mengambil konfigurasi demo dari endpoint Cloudflare yang tercantum dalam `config/relay.json`, lalu menyimpan URL dan token demo pada `.env` lokal. `start.ps1` juga menjalankan langkah ini apabila konfigurasi belum terisi. Konfigurasi milik pengguna yang sudah lengkap tidak ditimpa. Tidak ada request OpenAI saat mengambil konfigurasi; sesudah aplikasi berjalan, login admin dan pilih **Uji koneksi AI** untuk memeriksa OpenAI dengan satu request embedding kecil berbayar.
-
-Akses demo ujian berlaku hingga **30 Oktober 2026 pukul 23.59 WIB** (batas tepat: `2026-10-30T16:59:59Z`). Setelah berakhir atau dicabut pemilik, pemanggilan AI berhenti; dokumen dan data lokal tetap tersimpan. Jika koneksi otomatis gagal, setup memberi pesan bahwa AI belum siap. Periksa internet, lalu ulangi setup atau jalankan `.\.venv\Scripts\python.exe -m backend.setup_relay`.
-
-Pemilik telah mengizinkan akses demo publik selama masa pengujian: siapa pun yang mengunduh kode dapat memperoleh token demo melalui endpoint instalasi dan pemakaian AI ditagihkan ke akun pemilik. Token demo berbeda dari token privat instalasi pemilik; model, operasi, proteksi per menit, dan masa berlaku tetap dikendalikan Cloudflare. **API key OpenAI tidak dikirim ke laptop penguji. Jangan membagikan `.env` melalui Git.** Panduan aktivasi/pencabutan: [instalasi otomatis](docs/automatic-installation.md). Petunjuk relay milik sendiri dan konfigurasi manual sebagai alternatif ada pada [docs/relay-setup.md](docs/relay-setup.md).
-
-Buka:
-
-- Chat: <http://127.0.0.1:8000>
-- Admin: <http://127.0.0.1:8000/admin>
-- Swagger/OpenAPI: <http://127.0.0.1:8000/docs>
-
-Gunakan alamat `127.0.0.1` yang sama secara konsisten agar pemeriksaan origin, cookie, dan penyimpanan penanda percakapan sesuai. `start.ps1 -Port 8001` memilih port lain sekaligus menyesuaikan origin. Jalankan satu proses backend, tanpa `--workers` tambahan; penguncian chat dan antrean ingestion berada di memori proses, sedangkan riwayat serta konteks chat disimpan di SQLite.
+- Gunakan alamat `127.0.0.1` secara konsisten agar cookie dan pemeriksaan origin sesuai.
+- Port lain: `.\start.ps1 -Port 8001`. Jalankan satu proses backend saja (tanpa `--workers`).
+- Tesseract milik sendiri dapat dipakai dengan mengisi `SIRA_TESSERACT_CMD` di `.env`.
 
 ## Penggunaan
 
-1. Login admin, lalu pilih **Uji koneksi AI**. Status konfigurasi di UI belum membuktikan OpenAI dapat dihubungi; tombol ini melakukan satu request embedding kecil yang berbiaya.
-2. Upload PDF dengan judul yang jelas. Batas 100 MiB dan 300 halaman secara default. PDF terenkripsi, rusak, dan non-PDF ditolak.
-3. Tunggu status siap. Pemrosesan berjalan di background dengan progres. PDF scan membutuhkan waktu OCR dan mungkin bantuan vision.
-   Scan memakai **OCR lokal → GPT-6 Luna → GPT-5.6 Sol**. Pemeriksaan lokal seluruh dokumen berjalan tanpa menunggu AI. Tiga worker AI membaca gambar asli secara mandiri, tanpa teks OCR/transkripsi model sebelumnya. Tabel dibaca utuh dengan struktur baris, kolom dan sel gabungan; Sol hanya membaca area yang belum lolos. Jika tetap ragu, tersedia review selektif manusia. **Baca dengan AI** meminta pembacaan gambar pada semua area nonkosong; pada dokumen siap, **Baca ulang dengan AI** membuat versi baru dari PDF tersimpan tanpa upload ulang. Bantuan AI berbayar; chatbot memakai GPT-6 Luna. Checkpoint mencegah request berhasil diulang saat resume. Gangguan layanan menghentikan antrean AI berikutnya tanpa eskalasi model, sementara pemeriksaan lokal tetap berjalan.
-   Alternatif: pilih **Review dan koreksi**. Sistem menyiapkan teks secara lokal, mempertahankan halaman hasil AI yang sudah tersedia, lalu menampilkan gambar asli dan editor per halaman. Petunjuk menampilkan alasan dan kutipan yang diragukan. Pilih **Lihat bagian ini dan tandai teks** untuk membuka crop gambar dan menyorot kutipan pada editor. Area perkiraan diberi label; jika AI gagal format dan lokasi kata belum diketahui, kegagalan tersebut dijelaskan secara terpisah. Cocokkan dengan gambar, koreksi teks, dan simpan konfirmasi. Halaman yang sudah lolos otomatis tidak wajib dikonfirmasi ulang. Edit tambahan pada halaman otomatis membuat halaman itu memerlukan konfirmasi. Halaman kosong memerlukan penandaan eksplisit. Setelah halaman yang perlu review dikonfirmasi, pilih **Buat indeks dari hasil review**. Langkah terakhir hanya memakai embedding, tanpa OCR AI ulang. Draft tetap tersimpan setelah refresh/restart; versi lama tetap aktif hingga indeks baru berhasil.
-   Dokumen yang sudah siap juga tetap memiliki **Review dan koreksi**. Ringkasan admin menampilkan jumlah halaman aktif, indikator OCR lokal dari bukti tersimpan, dan rekomendasi review opsional. Skor ini bukan persentase kebenaran. Review membuka draft terpisah tanpa OCR/AI ulang; versi aktif tetap tersedia. Detail: [review dokumen aktif](docs/active-document-review.md).
-4. Ajukan pertanyaan di chat. Pertanyaan lanjutan menggunakan maksud pertanyaan sebelumnya dan retrieval baru. SIRA meminta klarifikasi jika konteks belum cukup.
-5. Ubah judul tanpa embedding ulang, ganti PDF melalui versi baru, atau hapus melalui admin. Versi lama tetap aktif jika penggantian gagal. Pekerjaan yang terputus ditandai gagal saat startup dan dapat diproses ulang.
+1. Login ke `/admin`, klik **Uji koneksi AI**. Dua dokumen bawaan sudah berstatus **siap**.
+2. Untuk menambah dokumen, upload PDF dengan judul yang jelas, tunggu status **siap**. PDF teks selesai dalam hitungan detik; PDF scan membutuhkan waktu OCR dan bantuan AI.
+3. Jika ada halaman yang perlu diperiksa, buka **Review dan koreksi**: cocokkan teks dengan gambar asli, perbaiki, konfirmasi, lalu klik **Buat indeks dari hasil review**. Detail: [review dokumen aktif](docs/active-document-review.md).
+4. Buka halaman chat dan ajukan pertanyaan, misalnya:
+   - "Bagaimana ketentuan penilaian kinerja anggota Polri?"
+   - "Apa saja persyaratan mengikuti SBP T.A. 2027?"
+5. Judul dapat diubah tanpa embedding ulang. Mengganti file membuat versi baru; versi lama tetap aktif jika penggantian gagal.
 
-Jika belum ada dokumen atau evidence tidak cukup, SIRA memberi pemberitahuan yang sopan. Kesalahan AI dan jawaban streaming yang terputus ditandai jelas. Jawaban tanpa referensi valid tidak ditandai selesai.
+Panduan demonstrasi: [docs/demo.md](docs/demo.md).
 
-## Arsitektur
+## Dokumentasi API
+
+- **File OpenAPI 3.1:** [`docs/openapi.json`](docs/openapi.json) — dapat dibuka tanpa menjalankan aplikasi, misalnya di [Swagger Editor](https://editor.swagger.io/) (File → Import file) atau di **Postman** (Import → pilih file, otomatis menjadi collection dengan base URL `http://127.0.0.1:8000`).
+- **Swagger UI interaktif:** <http://127.0.0.1:8000/docs> saat aplikasi berjalan.
+- Memperbarui file setelah API berubah: `.\.venv\Scripts\python.exe scripts\export-openapi.py` (tanpa menjalankan server atau memanggil AI).
+
+Endpoint admin memerlukan login: cookie sesi `HttpOnly` dan header `X-CSRF-Token` untuk request yang mengubah data.
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/api/health` | Status aplikasi |
+| POST | `/api/admin/login` · `/api/admin/logout` | Login / logout admin |
+| GET | `/api/admin/me` | Info sesi admin |
+| POST | `/api/admin/check-ai` | Uji koneksi AI |
+| GET | `/api/admin/documents` | Daftar dokumen dan status |
+| POST | `/api/admin/documents` | Upload dokumen baru |
+| PATCH | `/api/admin/documents/{id}` | Ubah judul |
+| PUT | `/api/admin/documents/{id}/file` | Ganti file (versi baru) |
+| DELETE | `/api/admin/documents/{id}` | Hapus dokumen |
+| POST | `/api/admin/documents/{id}/retry` | Proses ulang dokumen gagal |
+| POST | `/api/admin/documents/{id}/read-ai` | Baca ulang dengan AI |
+| POST · GET | `/api/admin/documents/{id}/review` | Mulai / lihat draft review |
+| GET | `/api/admin/documents/{id}/review/pages/{n}/image` | Gambar halaman untuk review |
+| PUT | `/api/admin/documents/{id}/review/pages/{n}` | Simpan koreksi halaman |
+| POST | `/api/admin/documents/{id}/review/activate` | Buat indeks dari hasil review |
+| POST | `/api/chat/sessions` | Buat sesi / percakapan baru |
+| POST | `/api/chat/history` | Ambil riwayat percakapan |
+| POST | `/api/chat` | Kirim pertanyaan, jawaban streaming |
+
+## Struktur proyek dan database
 
 ```text
-Browser → FastAPI lokal → Cloudflare relay → OpenAI
-              ↓
-      SQLite + PDF + Chroma lokal
+backend/app/      API FastAPI, autentikasi, ingestion, OCR, retrieval, chat
+  main.py           routing REST API
+  ingestion.py      validasi, ekstraksi, chunking, embedding
+  ocr_pipeline.py   OCR lokal + AI
+  native_pdf.py     ekstraksi tabel PDF teks
+  retrieval.py      pencarian kata BM25 dan penggabungan hasil
+  chat.py           sesi, retrieval, prompt, validasi sitasi
+  vectors.py        ChromaDB
+  db.py             skema SQLite
+  seed.py           memuat knowledge base bawaan sekali pada instalasi kosong
+seed/             knowledge base bawaan (teks, chunk, embedding; tanpa PDF)
+frontend/src/     UI React (chat dan admin)
+worker/src/       Relay Cloudflare: prompt (policy.ts), kuota, pembatasan model
+tests/            Tes backend (AI tiruan)
+worker/test/      Tes relay
+scripts/          Setup OCR, konfigurasi relay, ekspor OpenAPI dan knowledge base bawaan
+docs/             Dokumentasi teknis dan catatan pengujian
+data/             SQLite, PDF, Chroma, cache tokenizer (lokal, tidak masuk Git)
 ```
 
-Ingestion: validasi PDF → ekstraksi teks per halaman → OCR lokal jika perlu → GPT-6 Luna → GPT-5.6 Sol hanya pada potongan meragukan → review selektif jika belum lolos → chunk maksimal sekitar 650 token → embedding `text-embedding-3-small` → indeks Chroma → aktivasi versi.
+### Tabel SQLite utama
 
-Chat: pertanyaan dan konteks maksud sesi → embedding query + pencarian kata BM25 pada seluruh potongan versi aktif → evidence bernomor → GPT-6 Luna → streaming → validasi ID sumber → referensi teks. Histori jawaban model tidak dijadikan sumber fakta.
-
-Pencarian menggabungkan kandidat vektor dengan kandidat kata, termasuk variasi kata seperti “lolos/lulus/kelulusan”. Sumber tetap berupa teks asli dokumen. Indeks kata berada di memori dan diperbarui saat knowledge base berubah; tidak perlu upload atau embedding ulang. Pertanyaan lanjutan seperti “lah, bukannya ada di jadwal?” mempertahankan topik pertanyaan pengguna sebelumnya. Jika AI menyatakan informasi belum ditemukan, aplikasi melakukan satu pencarian tambahan; jawaban diperiksa ulang jika ditemukan potongan sumber baru. Batasnya tetap 10 sumber dan 24.000 karakter, tanpa pencarian berulang tanpa akhir. Log backend mencatat ID potongan, dokumen dan halaman yang dikirim sebagai sumber, tanpa menyimpan API key atau isi pertanyaan dalam log pencarian.
-
-API key OpenAI hanya berada di Cloudflare Secrets. Relay membatasi operasi, model, payload, jumlah request, unit reservasi, kecepatan, dan masa berlaku. Token lokal dapat dicabut. Pengguna dengan kendali penuh atas PC dapat membaca token relay lokal, sehingga token tersebut memiliki batas penggunaan dan bukan API key utama.
-
-## Struktur dan penyimpanan
-
-| Lokasi | Isi |
+| Tabel | Isi |
 | --- | --- |
-| `backend/app/` | API, autentikasi, OCR, ingestion, retrieval, streaming |
-| `frontend/src/` | Chat dan admin React/TypeScript |
-| `worker/src/` | Relay OpenAI dan kuota persisten Durable Object |
-| `tests/`, `worker/test/` | Pengujian lokal dengan AI tiruan |
-| `data/` | SQLite, PDF, indeks Chroma, cache tokenizer; tidak dilacak Git |
-| `docs/` | Setup relay, bukti uji, dan panduan demo |
+| `admin`, `admin_sessions` | Akun admin (hash Argon2) dan sesi login (hash token + CSRF) |
+| `documents` | Judul, nama file, versi aktif dan versi yang sedang diproses |
+| `versions` | File per versi: hash SHA-256, ukuran, status, progres, jumlah halaman, pesan error |
+| `pages` | Teks per halaman dan metode ekstraksinya |
+| `chunks` | Potongan teks yang diindeks: versi, halaman, heading |
+| `review_pages`, `ocr_regions`, `ocr_page_jobs` | Draft review manual dan checkpoint OCR per area/halaman |
+| `chat_sessions`, `chat_messages` | Sesi chat (hash token), konteks pertanyaan, dan riwayat pesan |
 
-Hentikan backend sebelum menyalin seluruh `data/` untuk backup. PDF dan database tidak dilayani sebagai aset web. Pesan, referensi, status jawaban, dan konteks chat disimpan di SQLite; browser menyimpan token sesi acak di localStorage serta cookie HttpOnly/SameSite Strict sebagai cadangan. Backend hanya menyimpan hash token. Halaman selalu memeriksa sesi server saat dibuka, termasuk jika penanda localStorage tidak tersedia. Membuka riwayat tidak memanggil OpenAI. Browser/profil berbeda memulai percakapan terpisah; menghapus seluruh data situs dapat menghilangkan kedua penanda sesi. Gunakan alamat yang sama untuk membuka kembali percakapan. **Percakapan baru** menghapus pesan/konteks sesi lama dan mencabut token lamanya. Riwayat jawaban lama hanya untuk tampilan, bukan sumber fakta bagi model. Untuk mereset password admin, hentikan aplikasi lalu jalankan:
-
-```powershell
-.\.venv\Scripts\python.exe -m backend.setup_admin --reset
-```
+Browser hanya menyimpan token sesi acak (localStorage dan cookie HttpOnly sebagai cadangan); backend menyimpan hash-nya saja. PDF dan database tidak dilayani sebagai file web. Hentikan backend sebelum menyalin folder `data/` untuk backup.
 
 ## Pengujian
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check backend tests scripts
-cd frontend
-npm ci
-npm run build
-cd ..\worker
-npm ci
-npm run check
-npm test
-npm run dry-run
-npm run test:runtime
+cd frontend; npm ci; npm run build
+cd ..\worker; npm ci; npm run check; npm test; npm run dry-run; npm run test:runtime
 ```
 
-Runtime test memerlukan hasil bundel `worker/dist/index.js`; seluruh tes memakai kredensial palsu dan tidak menagih OpenAI. Hasil serta batas verifikasi nyata dicatat pada [docs/testing.md](docs/testing.md). Panduan demonstrasi dan video ada di [docs/demo.md](docs/demo.md).
+Seluruh tes memakai AI tiruan dan kredensial palsu, sehingga tidak menagih OpenAI. `test:runtime` membutuhkan hasil `npm run dry-run` terbaru. Hasil dan batas verifikasi dicatat di [docs/testing.md](docs/testing.md).
 
-## Batas prototype
+## Keterbatasan dan pengembangan lanjutan
 
-- Proteksi prompt injection berlapis mengurangi risiko; hasil uji tidak menjamin model kebal terhadap semua jailbreak.
-- Seluruh dokumen aktif dapat menjadi bahan jawaban. Referensi tanpa tautan tidak menerapkan klasifikasi kerahasiaan atau hak akses isi.
-- OCR memakai antrean independen dan area berdasarkan tata letak, tanpa enam potongan tetap. Tabel disimpan terstruktur dan dinormalisasi menjadi record baris yang tidak memisahkan kegiatan/tanggal. Validator memeriksa sel hilang, tumpang tindih, dan hubungan sel gabungan terhadap garis gambar jika tersedia. Hasil Sol yang tetap ragu masuk review selektif; review seluruh dokumen tersedia. Confidence tinggi dan format JSON valid bukan jaminan akurasi. Detail [OCR](docs/ocr-fallback.md).
-- Pemilihan provider/model, klasifikasi dokumen, banyak admin, daftar beberapa percakapan, sinkronisasi riwayat antarperangkat, dan deployment aplikasi penuh ke cloud merupakan pengembangan lanjutan.
-- Ambang retrieval, kelengkapan jawaban tabel/rumus, kualitas OCR, serta latency OpenAI perlu dievaluasi menggunakan dokumen dan koneksi nyata.
-- Jawaban faktual tanpa referensi memicu satu pengulangan terbatas. Draft diganti di UI; jika masih tanpa referensi, jawaban ditandai gagal. Ini dapat menambah waktu pada kasus tersebut.
+**Keterbatasan**
+
+- Membutuhkan internet dan layanan OpenAI untuk embedding, OCR AI, dan jawaban.
+- Kualitas OCR dokumen scan tidak dijamin 100%; angka, tanggal, dan negasi tetap perlu dicek melalui Review dan koreksi.
+- Proteksi prompt injection mengurangi risiko, tetapi tidak menjamin kebal terhadap semua jailbreak.
+- Validasi sitasi memastikan ID sumber valid, bukan memeriksa dukungan makna setiap kalimat.
+- Semua dokumen aktif dapat menjadi bahan jawaban; belum ada klasifikasi kerahasiaan atau hak akses per pengguna.
+- Satu admin, satu percakapan per browser, satu proses backend. Hanya format PDF.
+- Diuji pada Windows pengembang; instalasi pada PC Windows bersih belum diverifikasi.
+
+**Pengembangan lanjutan**
+
+- Pilihan model/provider AI dan pengaturan API key melalui admin.
+- Klasifikasi dokumen dan hak akses per pengguna; banyak akun dan admin.
+- Daftar beberapa percakapan dan sinkronisasi riwayat antarperangkat.
+- Format dokumen lain (DOCX, gambar), deployment penuh ke cloud.
+- Evaluasi otomatis akurasi retrieval dan jawaban dengan set pertanyaan acuan.
 
 ## Troubleshooting
 
 | Masalah | Langkah |
 | --- | --- |
-| `SyntaxError` diikuti `Unduhan tabel tokenizer gagal` pada setup lama | Gunakan `setup.ps1` terbaru yang mengirim kode Python melalui stdin agar kompatibel dengan Windows PowerShell 5.1, lalu ulangi perintah setup dengan Python 3.12. Tidak perlu menghapus `.venv` atau `.env`; pesan `Requirement already satisfied` berarti dependensi sudah terpasang |
-| Koneksi AI otomatis gagal | Periksa internet dan masa akses demo, jalankan `.\.venv\Scripts\python.exe -m backend.setup_relay`, lalu restart; konfigurasi relay milik sendiri tetap dapat diisi manual |
-| Relay menolak akses | Periksa token, aktivasi, tanggal kedaluwarsa, dan kuota melalui pemilik relay |
-| OCR tidak tersedia | Jalankan setup OCR atau periksa path dan `tesseract --list-langs` |
-| Ingestion gagal pada angka/negasi | Gunakan Review dan koreksi untuk mencocokkan gambar serta memperbaiki teks; atau Baca dengan AI jika kuota tersedia |
-| Kuota total relay tidak cukup | Review lokal tetap dapat disiapkan. Penambahan kuota OCR membutuhkan keputusan pemilik layanan; menunggu tidak mereset batas total. Indeks tetap memerlukan kuota embedding |
-| Login/CSRF gagal | Gunakan `http://127.0.0.1:8000` atau port yang dipilih `start.ps1`, login ulang |
-| Pemrosesan terputus | Restart, login admin, pilih proses ulang; versi lama yang siap tetap tersedia |
-| Frontend belum dibangun | Jalankan `npm ci` lalu `npm run build` dalam `frontend/` |
+| "Python 3.12 (64-bit) belum ditemukan" | Pasang Python 3.12 64-bit (langkah 1 instalasi), buka ulang PowerShell, lalu jalankan ulang `.\setup.ps1`. Jika sudah terpasang di lokasi lain: `.\setup.ps1 -PythonPath <lokasi python.exe>` |
+| "Folder .venv sudah ada tetapi bukan Python 3.12" | Hapus folder `.venv` (dibuat dari Python versi lain), lalu jalankan ulang `.\setup.ps1` |
+| `SyntaxError` lalu `Unduhan tabel tokenizer gagal` | Gunakan `setup.ps1` terbaru, lalu ulangi setup. Tidak perlu menghapus `.venv` atau `.env` |
+| Koneksi AI otomatis gagal | Periksa internet dan masa akses demo, jalankan `.\.venv\Scripts\python.exe -m backend.setup_relay`, lalu restart |
+| Relay menolak akses | Token, masa berlaku, atau kuota relay perlu diperiksa pemilik relay |
+| OCR tidak tersedia saat upload PDF scan | Jalankan `.\scripts\setup-ocr.ps1` (opsional, hanya untuk PDF scan) atau periksa `tesseract --list-langs` |
+| Hasil OCR salah pada angka/negasi | Gunakan **Review dan koreksi**, atau **Baca dengan AI** |
+| Login/CSRF gagal | Buka lewat `http://127.0.0.1:8000` (atau port pilihan `start.ps1`), lalu login ulang |
+| Pemrosesan terputus | Restart aplikasi, login admin, pilih **Proses ulang**; versi lama yang siap tetap tersedia |
+| Frontend belum dibangun | Jalankan `npm ci` lalu `npm run build` di folder `frontend/` |

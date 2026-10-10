@@ -1,5 +1,7 @@
 # Penerapan OCR nyata SBP, 8 Oktober 2026
 
+> **Model aktif saat ini (10 Oktober 2026):** jawaban chat **GPT-6 Luna**; OCR AI **GPT-6 Luna** dengan fallback **GPT-5.6 Sol**; embedding **text-embedding-3-small**. Run 8 Oktober di bawah memakai GPT-4.1 mini sebagai pembaca gambar awal (sebelum diganti GPT-6 Luna) dan GPT-4o mini untuk chat.
+
 Pengguna meminta pipeline diterapkan pada dokumen SBP yang tersimpan, setelah membedakan hasil lama dari uji pembanding. Halaman 1–4 yang sudah lolos GPT-4.1 mini dipakai ulang. Halaman 5–12 diproses dengan OCR lokal, mini pertama, mini kedua bila perlu, lalu Sol pada crop yang belum konsisten. Respons setiap tahap tersimpan di SQLite yang sama dengan aplikasi, tanpa fixture pengganti.
 
 ## Hasil

@@ -1,5 +1,7 @@
 # Catatan verifikasi SIRA
 
+> **Model aktif saat ini (10 Oktober 2026):** jawaban chat **GPT-6 Luna**; OCR AI **GPT-6 Luna** dengan fallback **GPT-5.6 Sol**; embedding **text-embedding-3-small**. Entri bertanggal di bawah mencatat model yang dipakai pada saat pengujian itu dan sengaja tidak diubah agar bukti tetap akurat.
+
 Tanggal: 8 Oktober 2026. Lingkungan: Windows pengembang, Python 3.12.14, Node.js 24, dependensi sesuai lockfile. Bukti ini memisahkan tes lokal dengan AI tiruan dari verifikasi menggunakan OpenAI nyata.
 
 ## Perkenalan dan sapaan — 9 Oktober 2026
@@ -255,3 +257,20 @@ Uji nyata terbatas `tmp/test-hybrid-live.py` membaca SQLite hanya-baca dan tidak
 Regresi offline mencakup bukti jadwal di luar seluruh kandidat vektor, variasi kata, dokumen lain, pertanyaan tak relevan, penghapusan/pergantian versi, petunjuk halaman, potongan terlalu panjang, konteks informal, pencarian ulang terbatas, sumber nonclickable, keamanan/isolasi sesi, dan siklus upload/review yang sudah ada. Pada run pertama 46 tes lulus dan 2 kasus paragraf berulang gagal; setelah deduplikasi 7 tes retrieval lulus. Pemeriksaan akhir dicatat setelah selesai.
 
 Pemeriksaan akhir: 27 tes terarah retrieval/chat/konteks/keamanan lulus setelah perubahan terakhir; 1 tes tambahan pergantian topik mandiri lulus. Siklus dokumen pada run awal lulus; hanya dua tes retrieval yang semula gagal telah diperbaiki dan lolos pada run ulang. Ruff dan git diff --check lulus. Tidak ada perubahan pada source OCR, schema SQLite, payload relay, atau konfigurasi Cloudflare.
+
+## 10 Oktober 2026 — aturan penyimpulan kategori pada prompt jawaban
+
+Masalah: pertanyaan contoh soal "persyaratan pangkat … bagi lulusan SMA" dijawab "tidak dicantumkan", padahal halaman 2 SBP memuat butir umum Abripda MDDP 0 tahun dan butir khusus Bharaka bagi lulusan S-1/S-2/S-3. Retrieval dan OCR sudah benar; model terlalu kaku. Prompt `ANSWER_SYSTEM` ditambah aturan umum (tanpa menyebut SBP/SMA): butir tanpa kualifikasi kategori berlaku bagi kategori yang tidak disebut, syarat yang menyebut kategori tertentu hanya berlaku bagi kategori itu, tanpa pengetahuan di luar sumber.
+
+Type check, 9 tes policy/biaya, dry-run dan 13 tes runtime lulus. Deployment Cloudflare `413e2861-7f94-4b35-9705-d12a50bb6a18`, binding sama dengan versi sebelumnya. Uji nyata `tmp/test-category-live.py` (SQLite read-only, 8 jawaban, 9 embedding):
+
+| Kasus | Hasil | Sumber | Waktu |
+| --- | --- | --- | --- |
+| Pangkat bagi lulusan SMA | Abripda MDDP 0 tahun, dengan dasar butir khusus S-1/S-2/S-3 | SBP hal. 2 | 5,9 s |
+| Pangkat bagi lulusan S-2 | Bharaka MDDP 4 tahun | SBP hal. 2 | 3,8 s |
+| Persyaratan SBP T.A. 2027 | Syarat administrasi, berkas, verifikasi 13 komponen, kesehatan/jasmani | SBP hal. 2, 3, 9 | 4,1 s |
+| Ketentuan penilaian kinerja | SMK, tahapan, pejabat penilai, faktor generik/spesifik | Perpol hal. 2, 4, 20 | 3,2 s |
+| Brownies (di luar KB) | Belum ditemukan | – | 4,7 s |
+| Uang saku peserta SBP | Belum ditemukan, tanpa angka karangan | (lihat catatan) | 4,4 s |
+
+Catatan: jawaban SMA memakai penebalan markdown `**…**` yang ditampilkan apa adanya oleh UI; jawaban "belum ditemukan" untuk uang saku tetap memberi penanda [S8] sehingga satu referensi ikut tampil. Keduanya diperbaiki pada hari yang sama: penebalan dirender sebagai teks tebal di UI, dan jawaban yang hanya menyatakan "belum ditemukan dalam dokumen" kini tampil tanpa penanda dan referensi (tes `test_not_found_answer_drops_citation_and_reference`). Sampel ini bukan jaminan akurasi seluruh pertanyaan.
