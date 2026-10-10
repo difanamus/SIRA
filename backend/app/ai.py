@@ -93,6 +93,25 @@ class Relay:
         except (KeyError, TypeError, ValueError) as exc:
             raise AIError("Format embedding layanan AI tidak sesuai.") from exc
 
+    def rewrite(self, question, history, documents):
+        """Ask the model for a clean standalone search query (typos, slang, follow-ups resolved)."""
+        result = self.post("rewrite", {"question": question, "history": history, "documents": documents})
+        try:
+            choice = result["choices"][0]
+            if choice.get("finish_reason") != "stop":
+                raise ValueError("Incomplete rewrite")
+            parsed = json.loads(choice["message"]["content"])
+            if (
+                not isinstance(parsed.get("query"), str)
+                or not isinstance(parsed.get("document"), str)
+                or not isinstance(parsed.get("pages"), list)
+                or not all(isinstance(page, int) and not isinstance(page, bool) for page in parsed["pages"])
+            ):
+                raise ValueError("Invalid rewrite")
+            return parsed
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+            raise AIError("Format penulisan ulang pertanyaan tidak sesuai.") from exc
+
     def vision(self, image, *, enhanced=False, fragment=False, structured=False):
         payload = {"images": image} if isinstance(image, list) else {"image": image}
         if enhanced:

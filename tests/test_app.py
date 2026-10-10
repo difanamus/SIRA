@@ -308,7 +308,7 @@ def test_abandoned_stream_preserves_partial_history_until_new_chat(harness):
     sid = session(client)
 
     async def interrupted(payload):
-        yield "Jawaban sedang disusun"
+        yield "Jawaban sedang disusun [S1]"
         await asyncio.sleep(10)
 
     ai.answer = interrupted
@@ -324,7 +324,7 @@ def test_abandoned_stream_preserves_partial_history_until_new_chat(harness):
 
     asyncio.run(leave())
     messages = client.post("/api/chat/history", json={"session_id": sid}).json()["messages"]
-    assert len(messages) == 2 and messages[-1]["text"] == "Jawaban sedang disusun"
+    assert len(messages) == 2 and messages[-1]["text"] == "Jawaban sedang disusun [S1]"
     assert not messages[-1]["pending"] and "terputus" in messages[-1]["error"]
     assert ctx.chat.get(sid).questions == []
     replacement = ctx.chat.create(sid)
@@ -799,7 +799,7 @@ def test_stream_failure_marks_partial_answer_and_does_not_keep_history(harness):
     wait_document(ctx, doc_id)
 
     async def broken(payload):
-        yield "Sebagian jawaban"
+        yield "Sebagian jawaban [S1]"
         raise AIError("Koneksi uji terputus.")
 
     ai.answer = broken
@@ -808,7 +808,7 @@ def test_stream_failure_marks_partial_answer_and_does_not_keep_history(harness):
     assert events[-1]["type"] == "error"
     assert not ctx.chat.get(sid).questions
     history = client.post("/api/chat/history", json={"session_id": sid}).json()["messages"]
-    assert history[-1]["text"] == "Sebagian jawaban" and not history[-1]["pending"]
+    assert history[-1]["text"] == "Sebagian jawaban [S1]" and not history[-1]["pending"]
     assert "terputus" in history[-1]["error"] and not history[-1]["sources"]
 
 
@@ -822,7 +822,9 @@ def test_missing_citation_is_not_labelled_complete(harness):
 
     ai.answer = unsupported
     events = ask(client, session(client), "Apa ketentuannya?")
-    assert events[-1]["type"] == "error" and "referensi" in events[-1]["message"]
+    assert events[-1] == {"type": "done", "sources": []}
+    shown = "".join(e["text"] for e in events if e["type"] == "delta")
+    assert shown.startswith("Mohon maaf, SIRA belum menemukan") and "pasti lulus" not in shown
 
 
 def test_named_greetings_finish_without_ai_or_citations_and_preserve_topic(harness):
@@ -943,7 +945,8 @@ def test_greeting_or_identity_with_document_question_still_requires_citations(ha
     before = ai.embeddings
     result = ask(client, session(client), question)
     assert ai.embeddings == before + 1
-    assert result[-1]["type"] == "error" and "referensi" in result[-1]["message"]
+    assert result[-1] == {"type": "done", "sources": []}
+    assert "pasti lulus" not in "".join(e["text"] for e in result if e["type"] == "delta")
 
 
 def test_missing_citation_retries_once_and_replaces_unverified_draft(harness):
@@ -959,7 +962,9 @@ def test_missing_citation_retries_once_and_replaces_unverified_draft(harness):
     sid = session(client)
     events = ask(client, sid, "Apa ketentuannya?")
     assert attempts == [False, True]
-    assert any(event["type"] == "reset_answer" for event in events)
+    # The uncited first draft is never displayed: no reset, and only the cited text is streamed.
+    assert not any(event["type"] == "reset_answer" for event in events)
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == "Ketentuan pengujian ada dalam dokumen [S1]."
     assert events[-1]["type"] == "done" and len(events[-1]["sources"]) == 1
     assert ctx.chat.get(sid).questions == ["Apa ketentuannya?"]
 
@@ -987,3 +992,170 @@ def test_chunked_request_size_limit_is_enforced(harness):
         "/api/chat", content=iter([b"x" * 20000, b"x" * 20000]), headers={"Content-Type": "application/json"}
     )
     assert response.status_code == 413
+
+
+def test_not_found_answer_drops_citation_and_reference(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def abstain(payload):
+        yield "Informasi mengenai uang saku peserta SBP T.A. 2027 belum ditemukan dalam dokumen yang tersedia. [S1]"
+
+    ai.answer = abstain
+    sid = session(client)
+    events = ask(client, sid, "Berapa uang saku peserta?")
+    assert events[-1] == {"type": "done", "sources": []}
+    assert not any(e["type"] in {"reset_answer", "replace_answer"} for e in events)  # nothing flashed
+    final_text = "".join(e["text"] for e in events if e["type"] == "delta")
+    assert final_text.startswith("Mohon maaf, SIRA belum menemukan") and "[S1]" not in final_text
+    saved = client.post("/api/chat/history", json={"session_id": sid}).json()["messages"][-1]
+    assert saved["text"].startswith("Mohon maaf, SIRA") and saved["sources"] == []
+
+
+def test_factual_answer_with_partial_absence_keeps_reference(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def mixed(payload):
+        yield "Jadwal tes belum ditemukan dalam dokumen yang tersedia. Ketentuan pengujian tercantum dalam sumber [S1]."
+
+    ai.answer = mixed
+    events = ask(client, session(client), "Kapan tes dan apa ketentuannya?")
+    assert events[-1]["type"] == "done" and [s["id"] for s in events[-1]["sources"]] == ["S1"]
+
+
+def test_explanatory_negation_does_not_trigger_second_search(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def inferred(payload):
+        yield "Bagi lulusan SMA pangkat minimal Abripda MDDP 0 tahun; lulusan SMA tidak disebut khusus pada butir tersebut. [S1]"
+
+    ai.answer = inferred
+    before = ai.embeddings
+    events = ask(client, session(client), "Apa syarat pangkat bagi lulusan SMA?")
+    assert ai.embeddings == before + 1 and len(ai.payloads) == 0
+    assert not any(e["type"] in {"reset_answer", "replace_answer"} for e in events)
+    assert events[-1]["type"] == "done" and len(events[-1]["sources"]) == 1
+
+
+def test_partial_absence_in_documents_still_triggers_second_search(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def partial(payload):
+        yield "Syarat pertama tercantum dalam sumber [S1]. Rentang nilainya belum ditemukan dalam dokumen yang tersedia."
+
+    ai.answer = partial
+    before = ai.embeddings
+    ask(client, session(client), "Apa syaratnya dan berapa rentang nilainya?")
+    assert ai.embeddings == before + 2
+
+
+def test_range_citation_on_not_found_answer_is_removed(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def ranged(payload):
+        yield "Informasi gaji pokok belum ditemukan dalam dokumen yang tersedia. [S1–S10]"
+
+    ai.answer = ranged
+    events = ask(client, session(client), "Berapa gaji pokok Bintara?")
+    assert events[-1] == {"type": "done", "sources": []}
+    assert "".join(e["text"] for e in events if e["type"] == "delta").startswith("Mohon maaf, SIRA")
+
+
+def test_marker_used_as_subject_keeps_reference_and_text(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    text = (
+        "Batas usia belum ditemukan dalam dokumen yang tersedia. "
+        "[S1] menyebut persyaratan pangkat, tetapi tidak mencantumkan batas usia."
+    )
+
+    async def mixed(payload):
+        yield text
+
+    ai.answer = mixed
+    events = ask(client, session(client), "Berapa batas usia peserta?")
+    assert not any(e["type"] == "replace_answer" for e in events)
+    assert events[-1]["type"] == "done" and [s["id"] for s in events[-1]["sources"]] == ["S1"]
+
+
+def test_uncited_general_knowledge_draft_is_never_streamed(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    drafts = []
+
+    async def recipe_then_abstain(payload):
+        drafts.append(payload.get("citation_retry", False))
+        if not payload.get("citation_retry"):
+            for part in ["Cara memasak nasi goreng: ", "panaskan minyak, ", "masukkan nasi."]:
+                yield part
+        else:
+            yield "Informasi tentang cara memasak nasi goreng belum ditemukan dalam dokumen yang tersedia."
+
+    ai.answer = recipe_then_abstain
+    sid = session(client)
+    events = ask(client, sid, "cara masak nasi goreng gimana?")
+    shown = "".join(e["text"] for e in events if e["type"] == "delta")
+    assert drafts == [False, True] and "minyak" not in shown and shown.startswith("Mohon maaf, SIRA belum menemukan")
+    assert not any(e["type"] == "reset_answer" for e in events)
+    saved = client.post("/api/chat/history", json={"session_id": sid}).json()["messages"][-1]
+    assert "minyak" not in saved["text"] and saved["sources"] == []
+
+
+def test_cited_answer_still_streams_after_first_marker(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def streamed(payload):
+        for part in ["Ketentuan pengujian ", "tercantum [S1]. ", "Bagian kedua ", "juga [S1]."]:
+            yield part
+
+    ai.answer = streamed
+    deltas = [e["text"] for e in ask(client, session(client), "Apa ketentuannya?") if e["type"] == "delta"]
+    assert deltas[0] == "Ketentuan pengujian tercantum [S1]. " and deltas[1:] == ["Bagian kedua ", "juga [S1]."]
+
+
+def test_general_knowledge_with_disclaimer_is_replaced_by_friendly_reply(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+    attempts = []
+
+    async def recipe_with_disclaimer(payload):
+        attempts.append(payload.get("citation_retry", False))
+        yield "Untuk kopi susu: seduh kopi, tambahkan susu dan gula, lalu aduk. "
+        yield "Informasi ini tidak tercantum dalam dokumen yang tersedia."
+
+    ai.answer = recipe_with_disclaimer
+    events = ask(client, session(client), "bro, gimana cara bikin kopi susu?")
+    shown = "".join(e["text"] for e in events if e["type"] == "delta")
+    assert attempts == [False, True]  # disclaimer does not excuse uncited content; one retry, then fixed reply
+    assert "seduh" not in shown and "Dokumen uji" in shown and shown.startswith("Mohon maaf, SIRA belum menemukan")
+    assert events[-1] == {"type": "done", "sources": []}
+
+
+def test_clarification_without_citation_is_kept(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def clarify(payload):
+        yield "Mohon jelaskan seleksi mana yang Anda maksud agar jawabannya tepat."
+
+    ai.answer = clarify
+    events = ask(client, session(client), "Apa syaratnya?")
+    assert "".join(e["text"] for e in events if e["type"] == "delta").startswith("Mohon jelaskan seleksi")
+
+
+def test_separate_range_markers_on_not_found_answer_give_friendly_reply(harness):
+    client, ctx, ai, _ = harness
+    wait_document(ctx, upload(client))
+
+    async def ranged(payload):
+        yield "Informasi gaji pokok Bintara Polri belum ditemukan dalam dokumen yang tersedia. [S1]–[S1]"
+
+    ai.answer = ranged
+    events = ask(client, session(client), "Berapa gaji pokok Bintara Polri saat ini?")
+    assert events[-1] == {"type": "done", "sources": []}
+    assert "".join(e["text"] for e in events if e["type"] == "delta").startswith("Mohon maaf, SIRA")

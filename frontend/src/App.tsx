@@ -186,6 +186,13 @@ export default function App() {
   );
 }
 
+// Render **tebal** from model output as <strong> without injecting HTML.
+function formatAnswer(text: string) {
+  return text
+    .split(/\*\*([^*\n]+)\*\*/g)
+    .map((part, index) => (index % 2 ? <strong key={index}>{part}</strong> : part));
+}
+
 type Message = {
   role: 'user' | 'assistant';
   text: string;
@@ -382,6 +389,10 @@ function Chat({ health }: { health: Health | null }) {
           if (current !== generation.current) return;
           if (data.type === 'status') setStatus(data.message);
           if (data.type === 'notice') patch({ notice: data.message });
+          if (data.type === 'replace_answer') {
+            answer = data.text;
+            patch({ text: answer });
+          }
           if (data.type === 'reset_answer') {
             answer = '';
             patch({ text: '', sources: [] });
@@ -508,7 +519,7 @@ function Chat({ health }: { health: Health | null }) {
                     </span>
                     {message.notice && <p className="message-notice">{message.notice}</p>}
                     <div className="message-text">
-                      {message.text.replace(/\*\*([^*]+)\*\*/g, '$1') ||
+                      {(message.text && formatAnswer(message.text)) ||
                         (!message.error
                           ? 'Sedang menyiapkan jawaban...'
                           : 'Jawaban belum tersedia.')}
