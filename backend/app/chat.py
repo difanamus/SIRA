@@ -72,9 +72,26 @@ def sentences_of(answer):
     return [s for s in sentences if not COURTESY_SENTENCE.search(s)]
 
 
+# A marker range over many sources ("[S1]–[S10]", "[S1–S10]") describes the sources as a whole.
+WIDE_RANGE = re.compile(r"\[S(\d+)\]\s*[-–—]\s*\[S(\d+)\]|\[S(\d+)\s*[-–—]\s*S(\d+)\]")
+
+
+def without_source_overviews(answer):
+    """Drop sentences supported only by a wide marker range, e.g. "[S1]–[S10] membahas penilaian kinerja,
+    bukan prosedur SIM": they summarise what the sources are about instead of citing evidence."""
+    kept = []
+    for part in re.split(r"(?<=[.!?])\s+|\n+", answer.strip()):
+        spans = [[int(n) for n in m.groups() if n] for m in WIDE_RANGE.finditer(part)]
+        wide = any(len(n) == 2 and n[1] - n[0] >= 4 for n in spans)
+        if wide and not CITATION.search(WIDE_RANGE.sub("", part)):
+            continue
+        kept.append(part)
+    return " ".join(kept)
+
+
 def is_abstention(answer):
     """True when every sentence only says the information is absent (no factual claim to cite)."""
-    informative = sentences_of(answer)
+    informative = sentences_of(without_source_overviews(answer))
     return bool(informative) and all(ABSTAIN_SENTENCE.search(s) for s in informative)
 
 

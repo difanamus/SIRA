@@ -122,3 +122,10 @@ test('rewrite uses fixed model, strict JSON schema and bounded data-only input',
   assert.throws(() => prepare('/rewrite', { question: '', history: [], documents: [] }));
   assert.throws(() => prepare('/rewrite', { question: 'x', history: [], documents: ['a'.repeat(181)] }));
 });
+
+test('answer prompt reads requirements as a whole before excluding a category', () => {
+  assert.ok(ANSWER_SYSTEM.includes('satu kesatuan'));
+  assert.ok(ANSWER_SYSTEM.includes('isian khusus'));
+  assert.ok(ANSWER_SYSTEM.includes('jangan menyimpulkan kategori itu tidak memenuhi syarat'));
+  assert.ok(ANSWER_SYSTEM.includes('jawab langsung pada kalimat pertama'));
+});

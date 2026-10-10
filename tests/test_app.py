@@ -1159,3 +1159,17 @@ def test_separate_range_markers_on_not_found_answer_give_friendly_reply(harness)
     events = ask(client, session(client), "Berapa gaji pokok Bintara Polri saat ini?")
     assert events[-1] == {"type": "done", "sources": []}
     assert "".join(e["text"] for e in events if e["type"] == "delta").startswith("Mohon maaf, SIRA")
+
+
+def test_source_overview_with_wide_range_is_not_evidence():
+    from backend.app.chat import is_abstention
+
+    overview = (
+        "Informasi tentang cara membuat SIM di Polres belum ditemukan dalam dokumen yang tersedia. "
+        "[S1]–[S10] membahas penilaian kinerja dan seleksi pendidikan Polri, bukan prosedur penerbitan SIM."
+    )
+    assert is_abstention(overview)
+    assert is_abstention(overview.replace("[S1]–[S10]", "[S1–S10]"))
+    # Real evidence keeps the answer, including a short range over adjacent pages.
+    assert not is_abstention("Tanggal X belum ditemukan dalam dokumen. Pendaftaran dibuka 14 September 2026. [S2]")
+    assert not is_abstention("Berkas yang dibawa tercantum pada halaman 8 dan 9. [S1–S2]")
