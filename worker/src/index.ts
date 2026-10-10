@@ -183,7 +183,7 @@ export default {
         access: 'public-demo',
       }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
     }
-    if (!['/embeddings', '/answer', '/vision', '/vision-fragment'].includes(url.pathname))
+    if (!['/embeddings', '/answer', '/rewrite', '/vision', '/vision-fragment'].includes(url.pathname))
       return json('Tidak ditemukan.', 404);
     if (request.method !== 'POST') return json('Metode tidak diizinkan.', 405);
     const demoHash = await installationHash(env);

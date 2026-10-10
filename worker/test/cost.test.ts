@@ -71,3 +71,9 @@ test('cost includes cached input and reasoning once, rounded upwards to micro-US
   );
   assert.equal(actualCost(sol, {}), null);
 });
+
+test('rewrite is reserved by size, not with the larger vision allowance', () => {
+  const rewrite = prepare('/rewrite', { question: 'apa aja saratnya?', history: [], documents: ['SBP'] });
+  const reserved = reserveCost(rewrite);
+  assert.ok(reserved > 0 && reserved < 2000);
+});
